@@ -13,11 +13,16 @@
 
 #include "ross.h"
 
+/** HELLO message interval */
+#define HELLO_INTERVAL 2
 /** max neighbors (for array implementation) */
 #define OLSR_MAX_NEIGHBORS 30
 
 typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
+typedef enum {
+    HELLO
+} olsr_ev_type;
 
 /**
  struct hello - a basic hello message used by OLSR for link sensing / topology
@@ -53,7 +58,8 @@ struct Hello
  @endcode
  */
 
-typedef struct hello {
+typedef struct /* Hello */
+{
     /* No support for link codes yet! */
     /** Addresses of our neighbors */
     o_addr neighbor_addrs[OLSR_MAX_NEIGHBORS];
@@ -66,9 +72,9 @@ typedef struct hello {
     /** Willingness to carry and foward traffic for other nodes */
     uint8_t Willingness;
     /* Link message size is an unnecessary field */
-} hello_t;
+} hello;
 
-struct LinkTuple
+typedef struct /* LinkTuple */
 {
     /// Interface address of the local node.
     o_addr localIfaceAddr;
@@ -80,9 +86,9 @@ struct LinkTuple
     Time asymTime;
     /// Time at which this tuple expires and must be removed.
     Time time;
-};
+} link_tuple;
 
-struct NeighborTuple
+typedef struct /* NeighborTuple */
 {
     /// Main address of a neighbor node.
     o_addr neighborMainAddr;
@@ -93,7 +99,7 @@ struct NeighborTuple
     } status;
     /// A value between 0 and 7 specifying the node's willingness to carry traffic on behalf of other nodes.
     uint8_t willingness;
-};
+} neigh_tuple;
 
 struct TwoHopNeighborTuple
 {
@@ -128,9 +134,33 @@ protected:
  @endcode
  */
 
-typedef struct olsr_node_state {
+typedef struct /*OlsrState */
+{
+    /// Longitude for this node only
+    double lng;
+    /// Latitude for this node only
+    double lat;
+    /// vector<LinkTuple>
+    link_tuple linkSet[OLSR_MAX_NEIGHBORS];
+    unsigned num_tuples;
+    /// vector<LinkTuple>
+    neigh_tuple neighSet[OLSR_MAX_NEIGHBORS];
+    unsigned num_neigh;
     
-} node_state_t;
+} node_state;
+
+union message_type {
+    hello h;
+};
+
+typedef struct
+{
+    olsr_ev_type type;     ///< What type of message is this?
+    tw_lpid node_id;       ///< Node responsible for this event
+    double lng;            ///< Longitude for node_id
+    double lat;            ///< Latitude for node_id
+    union message_type mt; ///< Union for message type
+} olsr_msg_data;
 
 
 #endif /* OLSR_H_ */
