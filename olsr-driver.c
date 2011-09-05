@@ -10,6 +10,7 @@
 
 #define GRID_MAX 100
 #define STAGGER_MAX 10
+#define HELLO_DELTA 0.2
 
 static unsigned int nlp_per_pe = 8;
 
@@ -18,12 +19,14 @@ static unsigned int nlp_per_pe = 8;
  */
 void olsr_init(node_state *s, tw_lp *lp)
 {
+    hello *h;
     tw_event *e;
     olsr_msg_data *msg;
     tw_stime ts;
     
     s->num_tuples = 0;
     s->num_neigh  = 0;
+    s->local_address = lp->gid;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
     
@@ -31,17 +34,61 @@ void olsr_init(node_state *s, tw_lp *lp)
     
     e = tw_event_new(lp->gid, ts, lp);
     msg = tw_event_data(e);
-    msg->type = HELLO;
+    msg->type = HELLO_TX;
+    msg->lng = s->lng;
+    msg->lat = s->lat;
+    h = &msg->mt.h;
+    h->num_neighbors = 1;
+    h->neighbor_addrs[0] = s->local_address;
     tw_event_send(e);
 }
 
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
-    int i;
+    int i, j;
+    hello *h;
     tw_event *e;
     olsr_msg_data *msg;
     
     switch(m->type) {
+        case HELLO_TX:
+            for (i = 0; i < g_tw_nlp; i++) {
+                tw_stime ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                
+                tw_lp *cur_lp = g_tw_lp[i];
+                
+                e = tw_event_new(cur_lp->gid, ts, lp);
+                msg = tw_event_data(e);
+                msg->type = HELLO_RX;
+                msg->lng = s->lng;
+                msg->lat = s->lat;
+                h = &msg->mt.h;
+                h->num_neighbors = s->num_neigh + 1;
+                h->neighbor_addrs[0] = s->local_address;
+                for (j = 0; j < s->num_neigh; j++) {
+                    h->neighbor_addrs[j+1] = s->neighSet[j].neighborMainAddr;
+                }
+                tw_event_send(e);
+            }
+            
+            e = tw_event_new(lp, HELLO_INTERVAL, lp);
+            msg = tw_event_data(e);
+            msg->type = HELLO_TX;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            h = &msg->mt.h;
+            h->num_neighbors = 1;
+            h->neighbor_addrs[0] = s->local_address;
+            tw_event_send(e);
+            
+            break;
+        case HELLO_RX:
+            // TODO: Check if we can hear this message here?
+            // Add neighbor_addrs[0] to 1-hop neighbor list
+            
+            for (i = 0; i < s->num_neigh; i++) {
+                if (
+            }
         case HELLO:
             // TODO: Add new nodes
             // ...

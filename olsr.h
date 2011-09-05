@@ -21,12 +21,13 @@
 typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
 typedef enum {
-    HELLO
+    HELLO_RX,
+    HELLO_TX
 } olsr_ev_type;
 
 /**
  struct hello - a basic hello message used by OLSR for link sensing / topology
- detection.
+ detection.  NOTE: we'll hold OUR address in neighbor_addrs[0]!!!
  
  Here is the ns3 hello class:
  @code
@@ -146,6 +147,8 @@ typedef struct /*OlsrState */
     /// vector<LinkTuple>
     neigh_tuple neighSet[OLSR_MAX_NEIGHBORS];
     unsigned num_neigh;
+    /// this node's address
+    o_addr local_address;
     
 } node_state;
 
