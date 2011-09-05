@@ -11,7 +11,7 @@
 #define GRID_MAX 100
 #define STAGGER_MAX 10
 
-int total_radios = 5;
+static unsigned int nlp_per_pe = 8;
 
 /**
  * Initializer for OLSR
@@ -32,6 +32,7 @@ void olsr_init(node_state *s, tw_lp *lp)
     e = tw_event_new(lp->gid, ts, lp);
     msg = tw_event_data(e);
     msg->type = HELLO;
+    tw_event_send(e);
 }
 
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
@@ -57,6 +58,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 msg->mt.h.neighbor_addrs[i] = s->neighSet[i].neighborMainAddr;
             }
             msg->mt.h.num_neighbors = s->num_neigh;
+            tw_event_send(e);
     }
 }
 
@@ -83,7 +85,9 @@ tw_lptype olsr_lps[] = {
 };
 
 const tw_optdef olsr_opts[] = {
-    TWOPT_GROUP("OLSR Model")
+    TWOPT_GROUP("OLSR Model"),
+    TWOPT_UINT("lp_per_pe", nlp_per_pe, "number of LPs per processor"),
+    TWOPT_END(),
 };
 
 int main(int argc, char *argv[])
@@ -94,7 +98,7 @@ int main(int argc, char *argv[])
     
     tw_init(&argc, &argv);
     
-    tw_define_lps(1, sizeof(olsr_msg_data), 0);
+    tw_define_lps(nlp_per_pe, sizeof(olsr_msg_data), 0);
     
     for (i = 0; i < g_tw_nlp; i++) {
         tw_lp_settype(i, &olsr_lps[0]);
