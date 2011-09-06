@@ -16,7 +16,7 @@
 /** HELLO message interval */
 #define HELLO_INTERVAL 2
 /** max neighbors (for array implementation) */
-#define OLSR_MAX_NEIGHBORS 30
+#define OLSR_MAX_NEIGHBORS 512
 
 typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
@@ -163,6 +163,7 @@ typedef struct
     double lng;            ///< Longitude for node_id
     double lat;            ///< Latitude for node_id
     union message_type mt; ///< Union for message type
+    unsigned long target;  ///< Target index into g_tw_lp
 } olsr_msg_data;
 
 

@@ -10,9 +10,9 @@
 
 #define GRID_MAX 100
 #define STAGGER_MAX 10
-#define HELLO_DELTA 0.2
+#define HELLO_DELTA 0.0001
 
-static unsigned int nlp_per_pe = 16;
+static unsigned int nlp_per_pe = 512;
 
 /**
  * Initializer for OLSR
@@ -50,6 +50,9 @@ void olsr_init(node_state *s, tw_lp *lp)
  * - HELLO_RX: HELLO received, at the moment this only supports 1-hop
  * so we just pull the neighbor's address (neighbor_addrs[0]) from
  * the message.  HELLO_RX is dictated by HELLO_TX so don't schedule another
+ *
+ * TODO: Re-arrange logic so TX generates a single RX, which then schedules
+ * another RX, which schedules another RX, etc. until all or informed
  */
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
@@ -57,10 +60,30 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     int i, j;
     hello *h;
     tw_event *e;
+    tw_stime ts;
     olsr_msg_data *msg;
     
     switch(m->type) {
         case HELLO_TX:
+            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            
+            tw_lp *cur_lp = g_tw_lp[0];
+            
+            e = tw_event_new(cur_lp->gid, ts, lp);
+            msg = tw_event_data(e);
+            msg->type = HELLO_RX;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            msg->target = 0;
+            h = &msg->mt.h;
+            h->num_neighbors = s->num_neigh + 1;
+            h->neighbor_addrs[0] = s->local_address;
+            for (j = 0; j < s->num_neigh; j++) {
+                h->neighbor_addrs[j+1] = s->neighSet[j].neighborMainAddr;
+            }
+            tw_event_send(e);
+            
+            /*
             for (i = 0; i < g_tw_nlp; i++) {
                 tw_stime ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
@@ -79,6 +102,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 }
                 tw_event_send(e);
             }
+            */
             
             e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
             msg = tw_event_data(e);
@@ -109,6 +133,27 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             if (!in) {
                 s->neighSet[s->num_neigh].neighborMainAddr = h->neighbor_addrs[0];
                 s->num_neigh++;
+            }
+            
+            if (m->target < g_tw_nlp - 1) {
+                ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                
+                tw_lp *cur_lp = g_tw_lp[m->target + 1];
+                
+                e = tw_event_new(cur_lp->gid, ts, lp);
+                msg = tw_event_data(e);
+                msg->type = HELLO_RX;
+                msg->lng = m->lng;
+                msg->lat = m->lat;
+                msg->target = m->target + 1;
+                h = &msg->mt.h;
+                h->num_neighbors = m->mt.h.num_neighbors;//m->num_neigh + 1;
+                //h->neighbor_addrs[0] = s->local_address;
+                for (j = 0; j < h->num_neighbors; j++) {
+                    h->neighbor_addrs[j] = m->mt.h.neighbor_addrs[j];
+                    //h->neighbor_addrs[j] = s->neighSet[j].neighborMainAddr;
+                }
+                tw_event_send(e);
             }
             
             break;
@@ -171,6 +216,8 @@ const tw_optdef olsr_opts[] = {
 int main(int argc, char *argv[])
 {
     int i;
+    
+    g_tw_events_per_pe = nlp_per_pe * nlp_per_pe * 1;
     
     tw_opt_add(olsr_opts);
     
