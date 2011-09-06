@@ -45,6 +45,7 @@ void olsr_init(node_state *s, tw_lp *lp)
 
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
+    int in;
     int i, j;
     hello *h;
     tw_event *e;
@@ -71,7 +72,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 tw_event_send(e);
             }
             
-            e = tw_event_new(lp, HELLO_INTERVAL, lp);
+            e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
             msg = tw_event_data(e);
             msg->type = HELLO_TX;
             msg->lng = s->lng;
@@ -82,13 +83,29 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             tw_event_send(e);
             
             break;
+            
         case HELLO_RX:
             // TODO: Check if we can hear this message here?
             // Add neighbor_addrs[0] to 1-hop neighbor list
             
+            h = &m->mt.h;
+            
+            in = 0;
+            
             for (i = 0; i < s->num_neigh; i++) {
-                if (
+                if (s->neighSet[i].neighborMainAddr == h->neighbor_addrs[0]) {
+                    in = 1;
+                }
             }
+            
+            if (!in) {
+                s->neighSet[s->num_neigh].neighborMainAddr = h->neighbor_addrs[0];
+                s->num_neigh++;
+            }
+            
+            break;
+            
+            /*
         case HELLO:
             // TODO: Add new nodes
             // ...
@@ -106,12 +123,13 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             msg->mt.h.num_neighbors = s->num_neigh;
             tw_event_send(e);
+             */
     }
 }
 
 void olsr_final(node_state *s, tw_lp *lp)
 {
-    
+    printf("node %p contains %d neighbors\n", s->local_address, s->num_neigh);
 }
 
 tw_peid olsr_map(tw_lpid gid)
