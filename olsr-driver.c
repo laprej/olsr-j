@@ -12,7 +12,7 @@
 #define STAGGER_MAX 10
 #define HELLO_DELTA 0.2
 
-static unsigned int nlp_per_pe = 8;
+static unsigned int nlp_per_pe = 16;
 
 /**
  * Initializer for OLSR
@@ -43,6 +43,14 @@ void olsr_init(node_state *s, tw_lp *lp)
     tw_event_send(e);
 }
 
+/**
+ * Event handler.  Basically covers two events at the moment:
+ * - HELLO_TX: HELLO transmit required now, so package up all of our
+ * neighbors into a message and send it.  Also schedule our next TX
+ * - HELLO_RX: HELLO received, at the moment this only supports 1-hop
+ * so we just pull the neighbor's address (neighbor_addrs[0]) from
+ * the message.  HELLO_RX is dictated by HELLO_TX so don't schedule another
+ */
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
     int in;
@@ -129,7 +137,12 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 
 void olsr_final(node_state *s, tw_lp *lp)
 {
+    int i;
+    
     printf("node %p contains %d neighbors\n", s->local_address, s->num_neigh);
+    for (i = 0; i < s->num_neigh; i++) {
+        printf("   neighbor[%d] is %p\n", i, s->neighSet[i].neighborMainAddr);
+    }
 }
 
 tw_peid olsr_map(tw_lpid gid)
