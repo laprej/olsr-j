@@ -12,7 +12,7 @@
 #define STAGGER_MAX 10
 #define HELLO_DELTA 0.0001
 
-static unsigned int nlp_per_pe = 512;
+static unsigned int nlp_per_pe = OLSR_MAX_NEIGHBORS;
 
 /**
  * Initializer for OLSR

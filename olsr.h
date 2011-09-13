@@ -16,7 +16,7 @@
 /** HELLO message interval */
 #define HELLO_INTERVAL 2
 /** max neighbors (for array implementation) */
-#define OLSR_MAX_NEIGHBORS 512
+#define OLSR_MAX_NEIGHBORS 16
 
 typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
