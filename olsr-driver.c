@@ -1,5 +1,6 @@
 #include "ross.h"
 #include "olsr.h"
+#include <assert.h>
 
 /**
  * @file
@@ -35,11 +36,12 @@ void olsr_init(node_state *s, tw_lp *lp)
     e = tw_event_new(lp->gid, ts, lp);
     msg = tw_event_data(e);
     msg->type = HELLO_TX;
+    msg->originator = s->local_address;
     msg->lng = s->lng;
     msg->lat = s->lat;
     h = &msg->mt.h;
-    h->num_neighbors = 1;
-    h->neighbor_addrs[0] = s->local_address;
+    h->num_neighbors = 0;
+    //h->neighbor_addrs[0] = s->local_address;
     tw_event_send(e);
 }
 
@@ -72,14 +74,15 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
             msg->type = HELLO_RX;
+            msg->originator = m->originator;
             msg->lng = s->lng;
             msg->lat = s->lat;
             msg->target = 0;
             h = &msg->mt.h;
-            h->num_neighbors = s->num_neigh + 1;
-            h->neighbor_addrs[0] = s->local_address;
+            h->num_neighbors = s->num_neigh;// + 1;
+            //h->neighbor_addrs[0] = s->local_address;
             for (j = 0; j < s->num_neigh; j++) {
-                h->neighbor_addrs[j+1] = s->neighSet[j].neighborMainAddr;
+                h->neighbor_addrs[j] = s->neighSet[j].neighborMainAddr;
             }
             tw_event_send(e);
             
@@ -107,11 +110,12 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
             msg = tw_event_data(e);
             msg->type = HELLO_TX;
+            msg->originator = s->local_address;
             msg->lng = s->lng;
             msg->lat = s->lat;
             h = &msg->mt.h;
-            h->num_neighbors = 1;
-            h->neighbor_addrs[0] = s->local_address;
+            h->num_neighbors = 0;//1;
+            //h->neighbor_addrs[0] = s->local_address;
             tw_event_send(e);
             
             break;
@@ -124,17 +128,11 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             in = 0;
             
-            for (i = 0; i < s->num_neigh; i++) {
-                if (s->neighSet[i].neighborMainAddr == h->neighbor_addrs[0]) {
-                    in = 1;
-                }
-            }
+            // If we receive our own message, don't add ourselves but
+            // DO generate a new event for the next guy!
             
-            if (!in) {
-                s->neighSet[s->num_neigh].neighborMainAddr = h->neighbor_addrs[0];
-                s->num_neigh++;
-            }
-            
+            // Copy the message we just received; we can't add data to
+            // a message sent by another node
             if (m->target < g_tw_nlp - 1) {
                 ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
@@ -143,6 +141,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 e = tw_event_new(cur_lp->gid, ts, lp);
                 msg = tw_event_data(e);
                 msg->type = HELLO_RX;
+                msg->originator = m->originator;
                 msg->lng = m->lng;
                 msg->lat = m->lat;
                 msg->target = m->target + 1;
@@ -154,6 +153,22 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     //h->neighbor_addrs[j] = s->neighSet[j].neighborMainAddr;
                 }
                 tw_event_send(e);
+            }
+            
+            if (s->local_address == m->originator) {
+                return;
+            }
+            
+            for (i = 0; i < s->num_neigh; i++) {
+                if (s->neighSet[i].neighborMainAddr == m->originator) {
+                    in = 1;
+                }
+            }
+            
+            if (!in) {
+                s->neighSet[s->num_neigh].neighborMainAddr = m->originator;
+                s->num_neigh++;
+                assert(s->num_neigh < OLSR_MAX_NEIGHBORS);
             }
             
             break;
