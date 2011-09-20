@@ -70,6 +70,55 @@ static inline int out_of_radio_range(node_state *s, olsr_msg_data *m)
 }
 
 /**
+ * Compute D(y) as described in the "MPR Computation" section.  Description:
+ *
+ * The degree of an one hop neighbor node y (where y is a member of N), is
+ * defined as the number of symmetric neighbors of node y, EXCLUDING all the
+ * members of N and EXCLUDING the node performing the computation.
+ *
+ * N is the subset of neighbors of the node, which are neighbors of the
+ * interface I.
+ */
+static inline int Dy(node_state *s, o_addr target)
+{
+    int i, j, in;
+    o_addr temp[OLSR_MAX_NEIGHBORS];
+    int temp_size = 0;
+    
+    for (i = 0; i < s->num_two_hop; i++) {
+        
+        in = 0;
+        for (j = 0; j < s->num_neigh; j++) {
+            if (s->twoHopSet[i].twoHopNeighborAddr == s->neighSet[j].neighborMainAddr) {
+                // EXCLUDING all members of N...
+                in = 1;
+                continue;
+            }
+        }
+        
+        if (in) continue;
+        
+        if (s->twoHopSet[i].neighborMainAddr == target) {
+            in = 0;
+            // Add s->twoHopSet[i].twoHopNeighborAddr to this set
+            for (j = 0; j < temp_size; j++) {
+                if (temp[j] == s->twoHopSet[i].twoHopNeighborAddr) {
+                    in = 1;
+                }
+            }
+            
+            if (!in) {
+                temp[temp_size] = s->twoHopSet[i].twoHopNeighborAddr;
+                temp_size++;
+                assert(temp_size < OLSR_MAX_NEIGHBORS);
+            }
+        }
+    }
+    
+    return temp_size;
+}
+
+/**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
  * neighbors into a message and send it.  Also schedule our next TX
