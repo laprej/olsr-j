@@ -351,7 +351,11 @@ const tw_optdef olsr_opts[] = {
     TWOPT_END(),
 };
 
-int main(int argc, char *argv[])
+// Done mainly so doxygen will catch and differentiate this main
+// from other mains while allowing smooth compilation.
+#define olsr_main main
+
+int olsr_main(int argc, char *argv[])
 {
     int i;
     
