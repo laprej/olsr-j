@@ -28,6 +28,7 @@ void olsr_init(node_state *s, tw_lp *lp)
     //s->num_tuples = 0;
     s->num_neigh  = 0;
     s->num_two_hop = 0;
+    s->num_mpr = 0;
     s->local_address = lp->gid;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
@@ -318,6 +319,8 @@ void olsr_final(node_state *s, tw_lp *lp)
     printf("node %lu contains %d neighbors\n", s->local_address, s->num_neigh);
     for (i = 0; i < s->num_neigh; i++) {
         printf("   neighbor[%d] is %lu\n", i, s->neighSet[i].neighborMainAddr);
+        printf("   Dy(%lu) is %d\n", s->neighSet[i].neighborMainAddr,
+               Dy(s, s->neighSet[i].neighborMainAddr));
     }
     printf("node %lu has %d two-hop neighbors\n", s->local_address, 
            s->num_two_hop);

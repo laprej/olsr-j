@@ -145,14 +145,19 @@ typedef struct /*OlsrState */
     /// this node's address
     o_addr local_address;
     
-    /// vector<LinkTuple>
+    // vector<LinkTuple>
     //link_tuple linkSet[OLSR_MAX_NEIGHBORS];
     //unsigned num_tuples;
-    /// vector<LinkTuple>
+    
+    // vector<NeighborTuple>
     neigh_tuple neighSet[OLSR_MAX_NEIGHBORS];
     unsigned num_neigh;
+    // vector<TwoHopNeighborTuple>
     two_hop_neigh_tuple twoHopSet[OLSR_MAX_2_HOP];
     unsigned num_two_hop;
+    // set<Ipv4Address>
+    o_addr mprSet[OLSR_MAX_NEIGHBORS];
+    unsigned num_mpr;
     
 } node_state;
 
