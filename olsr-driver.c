@@ -138,6 +138,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     tw_event *e;
     tw_stime ts;
     olsr_msg_data *msg;
+    char covered[BITNSLOTS(OLSR_MAX_2_HOP)];
     
     switch(m->type) {
         case HELLO_TX:
@@ -287,6 +288,45 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             
             // END 2-HOP PROCESSING
+            
+            // BEGIN MPR COMPUTATION
+            
+            memset(covered, 0, BITNSLOTS(OLSR_MAX_2_HOP));
+            
+            // Take care of the "unused" bits
+            for (i = s->num_two_hop; i < OLSR_MAX_2_HOP; i++) {
+                BITSET(covered, i);
+            }
+            
+            while (1) {
+                int done = 1;
+                
+                for (i = 0; i < s->num_two_hop; i++) {
+                    // If a node is not covered, we're not done!
+                    if (!BITTEST(covered, i)) {
+                        done = 0;
+                    }
+                }
+                
+                if (done) break;
+                
+                for (i = 0; i < s->num_two_hop; i++) {
+                    if (BITTEST(covered, i)) {
+                        // If node _i_ is covered, continue;
+                        continue;
+                    }
+                    
+                    // Node _i_ is NOT covered, check if there exists a two-hop
+                    // neighbor that is equivalent to i
+                    tw_lp *t = g_tw_lp[i];
+                    
+                    for (j = 0; j < s->num_two_hop; j++) {
+                        
+                    }
+                }
+            }
+            
+            // END MPR COMPUTATION
             
             break;
             
