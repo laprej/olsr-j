@@ -15,6 +15,15 @@
 
 static unsigned int nlp_per_pe = OLSR_MAX_NEIGHBORS;
 
+// Used as scratch space for MPR calculations
+unsigned g_Dy[OLSR_MAX_NEIGHBORS];
+unsigned g_num_one_hop;
+neigh_tuple g_mpr_one_hop[OLSR_MAX_NEIGHBORS];
+unsigned g_num_two_hop;
+two_hop_neigh_tuple g_mpr_two_hop[OLSR_MAX_2_HOP];
+two_hop_neigh_tuple g_mpr_neigh_to_add;
+char g_covered[BITNSLOTS(OLSR_MAX_2_HOP)];
+
 /**
  * Initializer for OLSR
  */
@@ -80,7 +89,7 @@ static inline int out_of_radio_range(node_state *s, olsr_msg_data *m)
  * N is the subset of neighbors of the node, which are neighbors of the
  * interface I.
  */
-static inline int Dy(node_state *s, o_addr target)
+static inline unsigned Dy(node_state *s, o_addr target)
 {
     int i, j, in;
     o_addr temp[OLSR_MAX_NEIGHBORS];
@@ -133,12 +142,12 @@ static inline int Dy(node_state *s, o_addr target)
 void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
     int in;
-    int i, j;
+    int i, j, k;
     hello *h;
     tw_event *e;
     tw_stime ts;
     olsr_msg_data *msg;
-    char covered[BITNSLOTS(OLSR_MAX_2_HOP)];
+    //char covered[BITNSLOTS(OLSR_MAX_2_HOP)];
     
     switch(m->type) {
         case HELLO_TX:
@@ -291,27 +300,106 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             // BEGIN MPR COMPUTATION
             
-            memset(covered, 0, BITNSLOTS(OLSR_MAX_2_HOP));
+            // Initially no nodes are covered
+            memset(g_covered, 0, BITNSLOTS(OLSR_MAX_2_HOP));
+            s->num_mpr = 0;
+            
+            // Copy all relevant information to scratch space
+            g_num_one_hop = s->num_neigh;
+            for (i = 0; i < g_num_one_hop; i++) {
+                g_mpr_one_hop[i] = s->neighSet[i];
+            }
+            
+            g_num_two_hop = s->num_two_hop;
+            for (i = 0; i < g_num_two_hop; i++) {
+                g_mpr_two_hop[i] = s->twoHopSet[i];
+            }
+            
+            // Calculate D(y), where y is a member of N, for all nodes in N
+            for (i = 0; i < g_num_one_hop; i++) {
+                g_Dy[i] = Dy(s, g_mpr_one_hop[i].neighborMainAddr);
+            }
             
             // Take care of the "unused" bits
-            for (i = s->num_two_hop; i < OLSR_MAX_2_HOP; i++) {
-                BITSET(covered, i);
+            for (i = g_num_two_hop; i < OLSR_MAX_2_HOP; i++) {
+                BITSET(g_covered, i);
+            }
+            
+            // 3. Add to the MPR set those nodes in N, which are the *only*
+            // nodes to provide reachability to a node in N2.
+//            std::set<Ipv4Address> coveredTwoHopNeighbors;
+//            for (TwoHopNeighborSet::const_iterator twoHopNeigh = N2.begin (); twoHopNeigh != N2.end (); twoHopNeigh++)
+//            {
+//                bool onlyOne = true;
+//                // try to find another neighbor that can reach twoHopNeigh->twoHopNeighborAddr
+//                for (TwoHopNeighborSet::const_iterator otherTwoHopNeigh = N2.begin (); otherTwoHopNeigh != N2.end (); otherTwoHopNeigh++)
+//                {
+//                    if (otherTwoHopNeigh->twoHopNeighborAddr == twoHopNeigh->twoHopNeighborAddr
+//                        && otherTwoHopNeigh->neighborMainAddr != twoHopNeigh->neighborMainAddr)
+//                    {
+//                        onlyOne = false;
+//                        break;
+//                    }
+//                }
+//                if (onlyOne)
+//                {
+//                    NS_LOG_LOGIC ("Neighbor " << twoHopNeigh->neighborMainAddr
+//                                  << " is the only that can reach 2-hop neigh. "
+//                                  << twoHopNeigh->twoHopNeighborAddr
+//                                  << " => select as MPR.");
+//                    
+//                    mprSet.insert (twoHopNeigh->neighborMainAddr);
+//                    
+//                    // take note of all the 2-hop neighbors reachable by the newly elected MPR
+//                    for (TwoHopNeighborSet::const_iterator otherTwoHopNeigh = N2.begin ();
+//                         otherTwoHopNeigh != N2.end (); otherTwoHopNeigh++)
+//                    {
+//                        if (otherTwoHopNeigh->neighborMainAddr == twoHopNeigh->neighborMainAddr)
+//                        {
+//                            coveredTwoHopNeighbors.insert (otherTwoHopNeigh->twoHopNeighborAddr);
+//                        }
+//                    }
+//                }
+//            }
+            
+            for (i = 0; i < g_num_two_hop; i++) {
+                int onlyOne = 1;
+                // try to find another neighbor that can reach twoHopNeigh->twoHopNeighborAddr
+                for (j = 0; j < g_num_two_hop; j++) {
+                    if (g_mpr_two_hop[j].twoHopNeighborAddr == g_mpr_two_hop[i].twoHopNeighborAddr
+                        && g_mpr_two_hop[j].neighborMainAddr != g_mpr_two_hop[i].neighborMainAddr) {
+                        onlyOne = 0;
+                        break;
+                    }
+                }
+                
+                if (onlyOne) {
+                    s->mprSet[s->num_mpr] = g_mpr_two_hop[i].neighborMainAddr;
+                    s->num_mpr++;
+                    
+                    // take note of all the 2-hop neighbors reachable by the newly elected MPR
+                    for (j = 0; j < g_num_two_hop; j++) {
+                        if (g_mpr_two_hop[j].neighborMainAddr == g_mpr_two_hop[i].neighborMainAddr) {
+                            //
+                        }
+                    }
+                }
             }
             
             while (1) {
                 int done = 1;
                 
-                for (i = 0; i < s->num_two_hop; i++) {
+                for (i = 0; i < g_num_two_hop; i++) {
                     // If a node is not covered, we're not done!
-                    if (!BITTEST(covered, i)) {
+                    if (!BITTEST(g_covered, i)) {
                         done = 0;
                     }
                 }
                 
                 if (done) break;
                 
-                for (i = 0; i < s->num_two_hop; i++) {
-                    if (BITTEST(covered, i)) {
+                for (i = 0; i < g_num_two_hop; i++) {
+                    if (BITTEST(g_covered, i)) {
                         // If node _i_ is covered, continue;
                         continue;
                     }
@@ -320,8 +408,29 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     // neighbor that is equivalent to i
                     tw_lp *t = g_tw_lp[i];
                     
-                    for (j = 0; j < s->num_two_hop; j++) {
-                        
+                    int count = 0;
+                    
+                    for (j = 0; j < g_num_two_hop; j++) {
+                        if (g_mpr_two_hop[j].twoHopNeighborAddr == t->gid) {
+                            g_mpr_neigh_to_add = g_mpr_two_hop[j];
+                            count++;
+                            printf("count is %d\n", count);
+                        }
+                    }
+                    
+                    if (count == 1) {
+                        // Only 1 path exists!  We have to add this node-pair
+                        s->mprSet[s->num_mpr] = g_mpr_neigh_to_add.neighborMainAddr;
+                        s->num_mpr++;
+                        // Remove the nodes from N2 which are now covered by a
+                        // node in the MPR set
+                        for (j = 0; j < g_num_two_hop; j++) {
+                            if (g_mpr_two_hop[j].neighborMainAddr == s->mprSet[s->num_mpr-1]) {
+                                for (k = 0; k < OLSR_MAX_2_HOP; k++) {
+                                    if (
+                                }
+                            }
+                        }
                     }
                 }
             }
