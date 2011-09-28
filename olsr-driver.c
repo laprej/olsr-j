@@ -434,13 +434,37 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // Remove the nodes from N2 which are now covered by a node in the MPR set.
             for (i = 0; i < g_num_two_hop; i++) {
                 if (BITTEST(g_covered, g_mpr_two_hop[i].twoHopNeighborAddr)) {
-                    printf("g_num_two_hop is %d\n", g_num_two_hop);
+                    printf("1. g_num_two_hop is %d\n", g_num_two_hop);
                     remove_node_from_n2(g_mpr_two_hop[i].twoHopNeighborAddr);
-                    printf("g_num_two_hop is %d\n", g_num_two_hop);
+                    printf("2. g_num_two_hop is %d\n", g_num_two_hop);
                 }
             }
             
-            
+//            // 4. While there exist nodes in N2 which are not covered by at
+//            // least one node in the MPR set:
+//            while (N2.begin () != N2.end ())
+            while (g_num_two_hop) {
+//                // 4.1. For each node in N, calculate the reachability, i.e., the
+//                // number of nodes in N2 which are not yet covered by at
+//                // least one node in the MPR set, and which are reachable
+//                // through this 1-hop neighbor
+//                std::map<int, std::vector<const NeighborTuple *> > reachability;
+//                std::set<int> rs;
+//                for (NeighborSet::iterator it = N.begin (); it != N.end (); it++)
+//                {
+//                    NeighborTuple const &nb_tuple = *it;
+//                    int r = 0;
+//                    for (TwoHopNeighborSet::iterator it2 = N2.begin (); it2 != N2.end (); it2++)
+//                    {
+//                        TwoHopNeighborTuple const &nb2hop_tuple = *it2;
+//                        if (nb_tuple.neighborMainAddr == nb2hop_tuple.neighborMainAddr)
+//                            r++;
+//                    }
+//                    rs.insert (r);
+//                    reachability[r].push_back (&nb_tuple);
+//                }
+                
+            }
             
             // END MPR COMPUTATION
             
