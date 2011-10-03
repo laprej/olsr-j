@@ -73,6 +73,7 @@ struct Hello
 typedef struct /* Hello */
 {
     /* No support for link codes yet! */
+    char is_mpr;
     /** Addresses of our neighbors */
     o_addr neighbor_addrs[OLSR_MAX_NEIGHBORS];
     /** Number of neighbors, 0..n-1 */
