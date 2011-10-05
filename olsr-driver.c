@@ -40,6 +40,7 @@ void olsr_init(node_state *s, tw_lp *lp)
     s->num_neigh  = 0;
     s->num_two_hop = 0;
     s->num_mpr = 0;
+    s->num_mpr_sel = 0;
     s->local_address = lp->gid;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
@@ -167,6 +168,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
     int in;
     int i, j, k;
+    int is_mpr;
     hello *h;
     tw_event *e;
     tw_stime ts;
@@ -190,7 +192,20 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             //h->neighbor_addrs[0] = s->local_address;
             for (j = 0; j < s->num_neigh; j++) {
                 h->neighbor_addrs[j] = s->neighSet[j].neighborMainAddr;
-                h->is_mpr = 0;
+                // If s->neighSet[j].neighborMainAddr is our MPR, we need
+                // to set this appropriately
+                is_mpr = 0;
+                for (k = 0; k < s->num_mpr; k++) {
+                    if (s->mprSet[k] == s->neighSet[j].neighborMainAddr) {
+                        is_mpr = 1;
+                    }
+                }
+                if (is_mpr) {
+                    h->is_mpr[j] = 1;
+                }
+                else {
+                    h->is_mpr[j] = 0;
+                }
             }
             tw_event_send(e);
             
@@ -554,6 +569,23 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             
             // END MPR COMPUTATION
+            
+            // BEGIN MPR SELECTOR SET
+            
+            h = &m->mt.h;
+            
+            for (i = 0; i < h->num_neighbors; i++) {
+                if (h->is_mpr[i]) {
+                    // Check if it contains OUR address
+                    if (h->neighbor_addrs[i] == s->local_address) {
+                        // We should add this guy to the selector set
+                        s->mprSelSet[s->num_mpr_sel].mainAddr = m->originator;
+                        s->num_mpr_sel++;
+                    }
+                }
+            }
+            
+            // END MPR SELECTOR SET
             
             break;
             
