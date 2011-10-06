@@ -157,6 +157,25 @@ static inline void remove_node_from_n2(o_addr n)
 }
 
 /**
+ * Ensure that all nodes in MPR set are unique (hence "set")
+ */
+void mpr_set_uniq(node_state *s)
+{
+    int i;
+    
+    // Presumably if we just added a MPR, we only need to check all the
+    // others against the last one
+    o_addr last = s->mprSet[s->num_mpr-1];
+    
+    for (i = 0; i < s->num_mpr - 1; i++) {
+        if (s->mprSet[i] == last) {
+            s->num_mpr--;
+            return;
+        }
+    }
+}
+
+/**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
  * neighbors into a message and send it.  Also schedule our next TX
@@ -399,6 +418,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     s->mprSet[s->num_mpr] = g_mpr_two_hop[i].neighborMainAddr;
                     s->num_mpr++;
                     
+                    // Make sure they're all unique!
+                    mpr_set_uniq(s);
+                    
                     // take note of all the 2-hop neighbors reachable by the newly elected MPR
                     for (j = 0; j < g_num_two_hop; j++) {
                         if (g_mpr_two_hop[j].neighborMainAddr == g_mpr_two_hop[i].neighborMainAddr) {
@@ -545,6 +567,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     s->mprSet[s->num_mpr] = g_mpr_neigh_to_add.neighborMainAddr;
                     s->num_mpr++;
                     
+                    // Make sure they're all unique!
+                    mpr_set_uniq(s);
+                    
                     // take note of all the 2-hop neighbors reachable by the newly elected MPR
                     for (j = 0; j < g_num_two_hop; j++) {
                         if (g_mpr_two_hop[j].neighborMainAddr == g_mpr_neigh_to_add.neighborMainAddr) {
@@ -621,6 +646,7 @@ void olsr_final(node_state *s, tw_lp *lp)
         printf("   Dy(%lu) is %d\n", s->neighSet[i].neighborMainAddr,
                Dy(s, s->neighSet[i].neighborMainAddr));
     }
+    
     printf("node %lu has %d two-hop neighbors\n", s->local_address, 
            s->num_two_hop);
     for (i = 0; i < s->num_two_hop; i++) {
@@ -628,6 +654,15 @@ void olsr_final(node_state *s, tw_lp *lp)
                s->twoHopSet[i].neighborMainAddr,
                s->twoHopSet[i].twoHopNeighborAddr);
     }
+    
+    printf("node %lu has %d MPRs\n", s->local_address, 
+           s->num_mpr);
+    for (i = 0; i < s->num_mpr; i++) {
+        printf("   MPR[%d] is %lu\n", i, 
+               s->mprSet[i]);
+    }
+    
+    printf("node %lu had %d MPR selectors\n", s->local_address, s->num_mpr_sel);
 }
 
 tw_peid olsr_map(tw_lpid gid)
