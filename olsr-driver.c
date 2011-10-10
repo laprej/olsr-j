@@ -188,16 +188,18 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     int in;
     int i, j, k;
     int is_mpr;
+    TC *t;
     hello *h;
     tw_event *e;
     tw_stime ts;
+    tw_lp *cur_lp;
     olsr_msg_data *msg;
     
     switch(m->type) {
         case HELLO_TX:
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
-            tw_lp *cur_lp = g_tw_lp[0];
+            cur_lp = g_tw_lp[0];
             
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
@@ -614,25 +616,40 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             break;
             
-            /*
-        case HELLO:
-            // TODO: Add new nodes
-            // ...
+        case TC_TX:
+            // Might want to rename HELLO_DELTA...
+            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
-            // Schedule next event
-            e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
+            cur_lp = g_tw_lp[0];
+            
+            e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
-            msg->type = HELLO;
-            msg->node_id = lp->gid;
+            msg->type = TC_RX;
+            msg->originator = m->originator;
             msg->lng = s->lng;
             msg->lat = s->lat;
-            // Should this also happen for num_tuples or what?
-            for (i = 0; i < s->num_neigh; i++) {
-                msg->mt.h.neighbor_addrs[i] = s->neighSet[i].neighborMainAddr;
+            msg->target = 0;
+            t = &msg->mt.t;
+            t->num_mpr_sel = s->num_mpr_sel;
+            for (j = 0; j < s->num_mpr_sel; j++) {
+                t->neighborAddresses[j] = s->mprSelSet[j].mainAddr;
             }
-            msg->mt.h.num_neighbors = s->num_neigh;
             tw_event_send(e);
-             */
+            
+            e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
+            msg = tw_event_data(e);
+            msg->type = TC_TX;
+            msg->originator = s->local_address;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            t = &msg->mt.t;
+            t->num_mpr_sel = 0;
+            tw_event_send(e);
+            
+            break;
+            
+        case TC_RX:
+            break;
     }
 }
 

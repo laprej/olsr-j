@@ -25,6 +25,10 @@
 
 /** HELLO message interval */
 #define HELLO_INTERVAL 2
+/** TC message interval */
+#define TC_INTERVAL 5
+#define TOP_HOLD_TIME (3*TC_INTERVAL)
+
 /** max neighbors (for array implementation) */
 #define OLSR_MAX_NEIGHBORS 16
 #define OLSR_MAX_2_HOP (3 * OLSR_MAX_NEIGHBORS)
@@ -33,7 +37,9 @@ typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
 typedef enum {
     HELLO_RX,
-    HELLO_TX
+    HELLO_TX,
+    TC_RX,
+    TC_TX
 } olsr_ev_type;
 
 /**
@@ -86,6 +92,32 @@ typedef struct /* Hello */
     uint8_t Willingness;
     /* Link message size is an unnecessary field */
 } hello;
+
+/**
+ struct TC - Topology Control information.
+ 
+ The ns3 code is as follows:
+ @code
+struct Tc
+{
+    std::vector<Ipv4Address> neighborAddresses;
+    uint16_t ansn;
+    
+    void Print (std::ostream &os) const;
+    uint32_t GetSerializedSize (void) const;
+    void Serialize (Buffer::Iterator start) const;
+    uint32_t Deserialize (Buffer::Iterator start, uint32_t messageSize);
+};
+ @endcode
+ */
+
+typedef struct /* Tc */
+{
+    uint16_t ansn;
+    o_addr neighborAddresses[OLSR_MAX_NEIGHBORS];
+    unsigned num_mpr_sel;
+} TC;
+
 
 typedef struct /* LinkTuple */
 {
@@ -185,6 +217,7 @@ typedef struct /*OlsrState */
 
 union message_type {
     hello h;
+    TC t;
 };
 
 typedef struct
