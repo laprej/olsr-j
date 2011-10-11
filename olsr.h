@@ -164,6 +164,18 @@ typedef struct /* MprSelectorTuple */
     // Time expirationTime; // previously called 'time_'
 } mpr_sel_tuple;
 
+typedef struct /* TopologyTuple */
+{
+    /// Main address of the destination.
+    o_addr destAddr;
+    /// Main address of a node which is a neighbor of the destination.
+    o_addr lastAddr;
+    /// Sequence number.
+    uint16_t sequenceNumber;
+    /// Time at which this tuple expires and must be removed.
+    Time expirationTime;
+} top_tuple;
+
 /**
  This struct contains all of the OLSR per-node state.  Not everything in the
  ns3 class is necessary or implemented, but here is the ns3 OlsrState class:
@@ -212,6 +224,9 @@ typedef struct /*OlsrState */
     // vector<MprSelectorTuple>
     mpr_sel_tuple mprSelSet[OLSR_MAX_NEIGHBORS];
     unsigned num_mpr_sel;
+    // vector<TopologyTuple>
+    top_tuple topSet[OLSR_MAX_NEIGHBORS];
+    unsigned num_top_set;
     
 } node_state;
 

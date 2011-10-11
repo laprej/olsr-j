@@ -41,6 +41,7 @@ void olsr_init(node_state *s, tw_lp *lp)
     s->num_two_hop = 0;
     s->num_mpr = 0;
     s->num_mpr_sel = 0;
+    s->num_top_set = 0;
     s->local_address = lp->gid;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
