@@ -237,6 +237,7 @@ union message_type {
 
 typedef struct
 {
+    uint8_t ttl;           ///< The Time To Live field for this packet
     olsr_ev_type type;     ///< What type of message is this?
     o_addr originator;     ///< Node responsible for this event
     double lng;            ///< Longitude for node_id
