@@ -628,7 +628,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
             msg->type = TC_RX;
+            msg->ttl = 255;
             msg->originator = m->originator;
+            msg->sender = 
             msg->lng = s->lng;
             msg->lat = s->lat;
             msg->target = 0;
@@ -652,8 +654,20 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             break;
             
         case TC_RX:
+            
+            // 1. When a packet arrives at the router, the router evaluates the TTL.
+            // 2a. If the TTL=0, the router drops the packet, and sends an ICMP TTL Exceeded message to the source.
+            // 2b. If the TTL>0, then the router decrements the TTL by 1, and then forwards the packet.
+            // From http://www.dslreports.com/forum/r25655787-When-is-TTL-Decremented-by-a-Router-
+            
+            if (m->ttl == 0)
+                return;
+            
+            m->ttl--;
+            
             // Copy the message we just received; we can't add data to
             // a message sent by another node
+            
             if (m->target < g_tw_nlp - 1) {
                 ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
@@ -662,6 +676,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 e = tw_event_new(cur_lp->gid, ts, lp);
                 msg = tw_event_data(e);
                 msg->type = TC_RX;
+                msg->ttl = m->ttl;
                 msg->originator = m->originator;
                 msg->lng = m->lng;
                 msg->lat = m->lat;
@@ -673,6 +688,31 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 }
                 tw_event_send(e);
             }
+            
+            // We've already passed along the message which has to happen
+            // regardless of whether or not it can be heard, handled, etc.
+            
+            // Check to see if we can hear this message or not
+            if (out_of_radio_range(s, m)) {
+                //printf("Out of range!\n");
+                return;
+            }
+            
+            if (s->local_address == m->originator) {
+                return;
+            }
+            
+            // BEGIN TC PROCESSING
+            
+            // 1. If the sender interface of this message is not in the symmetric
+            // 1-hop neighborhood of this node, the message MUST be discarded.
+            for (i = 0; i < s->num_neigh; i++) {
+                
+            }
+            
+            
+            // END TC PROCESSING
+            
             
             break;
     }

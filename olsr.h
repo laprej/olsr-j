@@ -237,9 +237,10 @@ union message_type {
 
 typedef struct
 {
-    uint8_t ttl;           ///< The Time To Live field for this packet
     olsr_ev_type type;     ///< What type of message is this?
+    uint8_t ttl;           ///< The Time To Live field for this packet
     o_addr originator;     ///< Node responsible for this event
+    o_addr sender;         ///< Node to last touch this message (TC)
     double lng;            ///< Longitude for node_id
     double lat;            ///< Latitude for node_id
     union message_type mt; ///< Union for message type
