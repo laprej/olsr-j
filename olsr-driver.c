@@ -176,6 +176,9 @@ void mpr_set_uniq(node_state *s)
     }
 }
 
+/**
+ * Direct ripoff of corresponding ns3 function
+ */
 top_tuple * FindNewerTopologyTuple(o_addr last, uint16_t ansn, node_state *s)
 {
     int i;
@@ -183,6 +186,46 @@ top_tuple * FindNewerTopologyTuple(o_addr last, uint16_t ansn, node_state *s)
     for (i = 0; i < s->num_top_set; i++) {
         if (s->topSet[i].lastAddr == last && s->topSet[i].sequenceNumber > ansn)
             return &s->topSet[i];
+    }
+    
+    return NULL;
+}
+
+/**
+ * Direct ripoff of corresponding ns3 function
+ */
+void EraseOlderTopologyTuples(o_addr last, uint16_t ansn, node_state *s)
+{
+    int i;
+    int index_to_remove;
+    
+    while (1) {
+        index_to_remove = -1;
+        for (i = 0; i < s->num_top_set; i++) {
+            if (s->topSet[i].lastAddr == last && s->topSet[i].sequenceNumber < ansn) {
+                index_to_remove = i;
+                break;
+            }
+        }
+        
+        if (index_to_remove == -1) break;
+        
+        s->topSet[index_to_remove] = s->topSet[s->num_top_set-1];
+        s->num_top_set--;
+    }
+}
+
+/**
+ * Direct ripoff of corresponding ns3 function
+ */
+top_tuple * FindTopologyTuple(o_addr destAddr, o_addr lastAddr, node_state *s)
+{
+    int i;
+    
+    for (i = 0; i < s->num_top_set; i++) {
+        if (s->topSet[i].destAddr == destAddr && s->topSet[i].lastAddr == lastAddr) {
+            return &s->topSet[i];
+        }
     }
     
     return NULL;
@@ -315,6 +358,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 s->neighSet[s->num_neigh].neighborMainAddr = m->originator;
                 s->num_neigh++;
                 assert(s->num_neigh < OLSR_MAX_NEIGHBORS);
+                s->ansn++;
             }
             // END 1-HOP PROCESSING
             
@@ -647,6 +691,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->lat = s->lat;
             msg->target = 0;
             t = &msg->mt.t;
+            t->ansn = s->ansn;
             t->num_mpr_sel = s->num_mpr_sel;
             for (j = 0; j < s->num_mpr_sel; j++) {
                 t->neighborAddresses[j] = s->mprSelSet[j].mainAddr;
@@ -736,7 +781,46 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // then further processing of this TC message MUST NOT be
             // performed.
             top_tuple *tt = FindNewerTopologyTuple(m->originator, m->mt.t.ansn, s);
+            if (tt == NULL)
+                return;
             
+            // 3. All tuples in the topology set where:
+            //	T_last_addr == originator address AND
+            //	T_seq       <  ANSN
+            // MUST be removed from the topology set.
+            EraseOlderTopologyTuples(m->originator, m->mt.t.ansn, s);
+            
+            // 4. For each of the advertised neighbor main address received in
+            // the TC message:
+            for (i = 0; i < m->mt.t.num_mpr_sel; i++) {
+                o_addr addr = m->mt.t.neighborAddresses[i];
+                // 4.1. If there exist some tuple in the topology set where:
+                //        T_dest_addr == advertised neighbor main address, AND
+                //        T_last_addr == originator address,
+                // then the holding time of that tuple MUST be set to:
+                //        T_time      =  current time + validity time.
+                tt = FindTopologyTuple(addr, m->originator, s);
+                
+                if (tt != NULL) {
+#warning "Correct this line - TOP_HOLD_TIME should be in the struct!"
+                    tt->expirationTime = tw_now(lp) + TOP_HOLD_TIME;
+                }
+                else {
+                    // 4.2. Otherwise, a new tuple MUST be recorded in the topology
+                    // set where:
+                    //	T_dest_addr = advertised neighbor main address,
+                    //	T_last_addr = originator address,
+                    //	T_seq       = ANSN,
+                    //	T_time      = current time + validity time.
+                    s->num_top_set++;
+                    assert(s->num_top_set < OLSR_MAX_NEIGHBORS);
+                    s->topSet[s->num_top_set-1].destAddr = addr;
+                    s->topSet[s->num_top_set-1].lastAddr = m->originator;
+                    s->topSet[s->num_top_set-1].sequenceNumber = m->mt.t.ansn;
+#warning "Correct this line - TOP_HOLD_TIME should be in the struct!"
+                    s->topSet[s->num_top_set-1].expirationTime = tw_now(lp) + TOP_HOLD_TIME;
+                }
+            }
             
             // END TC PROCESSING
             

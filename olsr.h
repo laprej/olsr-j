@@ -228,6 +228,9 @@ typedef struct /*OlsrState */
     top_tuple topSet[OLSR_MAX_NEIGHBORS];
     unsigned num_top_set;
     
+    // Not part of the state in ns3 but fits here mostly
+    uint16_t ansn;
+    
 } node_state;
 
 union message_type {
