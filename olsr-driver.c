@@ -176,6 +176,18 @@ void mpr_set_uniq(node_state *s)
     }
 }
 
+top_tuple * FindNewerTopologyTuple(o_addr last, uint16_t ansn, node_state *s)
+{
+    int i;
+    
+    for (i = 0; i < s->num_top_set; i++) {
+        if (s->topSet[i].lastAddr == last && s->topSet[i].sequenceNumber > ansn)
+            return &s->topSet[i];
+    }
+    
+    return NULL;
+}
+
 /**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
@@ -630,7 +642,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->type = TC_RX;
             msg->ttl = 255;
             msg->originator = m->originator;
-            msg->sender = 
+            msg->sender = s->local_address;
             msg->lng = s->lng;
             msg->lat = s->lat;
             msg->target = 0;
@@ -678,10 +690,12 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 msg->type = TC_RX;
                 msg->ttl = m->ttl;
                 msg->originator = m->originator;
+                msg->sender = m->sender;
                 msg->lng = m->lng;
                 msg->lat = m->lat;
                 msg->target = m->target + 1;
                 t = &msg->mt.t;
+                t->ansn = 0;
                 t->num_mpr_sel = m->mt.t.num_mpr_sel;
                 for (j = 0; j < h->num_neighbors; j++) {
                     t->neighborAddresses[j] = m->mt.t.neighborAddresses[j];
@@ -704,11 +718,24 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             // BEGIN TC PROCESSING
             
+            in = 0;
+            
             // 1. If the sender interface of this message is not in the symmetric
             // 1-hop neighborhood of this node, the message MUST be discarded.
             for (i = 0; i < s->num_neigh; i++) {
-                
+                if (m->sender == s->neighSet[i].neighborMainAddr)
+                    in = 1;
             }
+            
+            if (!in)
+                return;
+            
+            // 2. If there exist some tuple in the topology set where:
+            //    T_last_addr == originator address AND
+            //    T_seq       >  ANSN,
+            // then further processing of this TC message MUST NOT be
+            // performed.
+            top_tuple *tt = FindNewerTopologyTuple(m->originator, m->mt.t.ansn, s);
             
             
             // END TC PROCESSING
