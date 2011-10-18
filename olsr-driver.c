@@ -244,6 +244,16 @@ top_tuple * FindTopologyTuple(o_addr destAddr, o_addr lastAddr, node_state *s)
 }
 
 /**
+ * Trying to ripoff the corresponding ns3 function :)
+ * Fortunately we don't need steps 4 or 5 since we don't support
+ * multiple interfaces or HNA.
+ */
+void RoutingTableComputation(node_state *s)
+{
+    
+}
+
+/**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
  * neighbors into a message and send it.  Also schedule our next TX
