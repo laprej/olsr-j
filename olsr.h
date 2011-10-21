@@ -183,7 +183,8 @@ typedef struct /* RoutingTableEntry */
 {
     o_addr destAddr; ///< Address of the destination node.
     o_addr nextAddr; ///< Address of the next hop.
-    uint32_t interface; ///< Interface index
+    // Only one interface in our model
+    //uint32_t interface; ///< Interface index
     uint32_t distance; ///< Distance in hops to the destination.
 } RT_entry;
 
