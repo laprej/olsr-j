@@ -937,13 +937,13 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     //	T_last_addr = originator address,
                     //	T_seq       = ANSN,
                     //	T_time      = current time + validity time.
+                    s->topSet[s->num_top_set].destAddr = addr;
+                    s->topSet[s->num_top_set].lastAddr = m->originator;
+                    s->topSet[s->num_top_set].sequenceNumber = m->mt.t.ansn;
+#warning "Correct this line - TOP_HOLD_TIME should be in the struct!"
+                    s->topSet[s->num_top_set].expirationTime = tw_now(lp) + TOP_HOLD_TIME;
                     s->num_top_set++;
                     assert(s->num_top_set < OLSR_MAX_TOP_TUPLES);
-                    s->topSet[s->num_top_set-1].destAddr = addr;
-                    s->topSet[s->num_top_set-1].lastAddr = m->originator;
-                    s->topSet[s->num_top_set-1].sequenceNumber = m->mt.t.ansn;
-#warning "Correct this line - TOP_HOLD_TIME should be in the struct!"
-                    s->topSet[s->num_top_set-1].expirationTime = tw_now(lp) + TOP_HOLD_TIME;
                 }
             }
             
@@ -1023,7 +1023,9 @@ int olsr_main(int argc, char *argv[])
 {
     int i;
     
-    g_tw_events_per_pe = nlp_per_pe * nlp_per_pe * 1;
+    g_tw_lookahead = HELLO_INTERVAL * 2;
+    
+    g_tw_events_per_pe = nlp_per_pe * nlp_per_pe * 32 + 32768*2;
     
     tw_opt_add(olsr_opts);
     
