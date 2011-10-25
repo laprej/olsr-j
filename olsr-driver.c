@@ -951,6 +951,16 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             
             break;
+            
+            /*
+             Situational awareness - every 10 seconds send a UDP packet
+             containing a node's location to a specified node with an
+             uplink.  Every 60 seconds, that uplink sends a message containing
+             nodes' locations.
+             */
+        case SA_TX:
+        case SA_RX:
+            break;
     }
     
     RoutingTableComputation(s);
@@ -1031,6 +1041,8 @@ int olsr_main(int argc, char *argv[])
     
     tw_init(&argc, &argv);
     
+    nlp_per_pe = OLSR_MAX_NEIGHBORS / tw_nnodes();
+        
     tw_define_lps(nlp_per_pe, sizeof(olsr_msg_data), 0);
     
     for (i = 0; i < g_tw_nlp; i++) {

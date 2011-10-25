@@ -41,7 +41,9 @@ typedef enum {
     HELLO_RX,
     HELLO_TX,
     TC_RX,
-    TC_TX
+    TC_TX,
+    SA_RX,
+    SA_TX
 } olsr_ev_type;
 
 /**
