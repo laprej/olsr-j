@@ -70,6 +70,16 @@ void olsr_init(node_state *s, tw_lp *lp)
     t = &msg->mt.t;
     t->num_mpr_sel = 0;
     tw_event_send(e);
+    
+    // Build our initial SA_TX messages
+    ts = tw_rand_unif(lp->rng) * STAGGER_MAX + SA_INTERVAL;
+    e = tw_event_new(lp->gid, ts, lp);
+    msg = tw_event_data(e);
+    msg->type = SA_TX;
+    msg->originator = s->local_address;
+    msg->lng = s->lng;
+    msg->lat = s->lat;
+    tw_event_send(e);
 }
 
 #define RANGE 40.0
@@ -956,9 +966,19 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
              Situational awareness - every 10 seconds send a UDP packet
              containing a node's location to a specified node with an
              uplink.  Every 60 seconds, that uplink sends a message containing
-             nodes' locations.
+             all nodes' locations.
              */
         case SA_TX:
+            
+            // Build our initial SA_TX messages
+            e = tw_event_new(lp->gid, SA_INTERVAL, lp);
+            msg = tw_event_data(e);
+            msg->type = SA_TX;
+            msg->originator = s->local_address;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            tw_event_send(e);
+            
         case SA_RX:
             break;
     }
@@ -971,6 +991,7 @@ void olsr_final(node_state *s, tw_lp *lp)
     int i;
     
     printf("node %lu contains %d neighbors\n", s->local_address, s->num_neigh);
+    printf("x: %f   \ty: %f\n", s->lng, s->lat);
     for (i = 0; i < s->num_neigh; i++) {
         printf("   neighbor[%d] is %lu\n", i, s->neighSet[i].neighborMainAddr);
         printf("   Dy(%lu) is %d\n", s->neighSet[i].neighborMainAddr,
