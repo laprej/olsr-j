@@ -36,6 +36,7 @@
 #define OLSR_MAX_2_HOP (3 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_TOP_TUPLES (3 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_ROUTES (3 * OLSR_MAX_NEIGHBORS)
+#define OLSR_MAX_DUPES 32
 
 typedef tw_lpid o_addr; /**< We'll use this as a place holder for addresses */
 typedef double Time;    /**< Use a double for time, check w/ Chris */
@@ -192,6 +193,21 @@ typedef struct /* RoutingTableEntry */
     uint32_t distance; ///< Distance in hops to the destination.
 } RT_entry;
 
+/// A Duplicate Tuple
+typedef struct /* DuplicateTuple */
+{
+    /// Originator address of the message.
+    o_addr address;
+    /// Message sequence number.
+    uint16_t sequenceNumber;
+    /// Indicates whether the message has been retransmitted or not.
+    int retransmitted;
+    /// List of interfaces which the message has been received on.
+    // std::vector<Ipv4Address> ifaceList;
+    /// Time at which this tuple expires and must be removed.
+    Time expirationTime;
+} dup_tuple;
+
 /**
  This struct contains all of the OLSR per-node state.  Not everything in the
  ns3 class is necessary or implemented, but here is the ns3 OlsrState class:
@@ -246,6 +262,9 @@ typedef struct /*OlsrState */
     // vector<RoutingTableEntry>
     RT_entry route_table[OLSR_MAX_ROUTES];
     unsigned num_routes;
+    // vector<DuplicateTuple>
+    dup_tuple dupSet[OLSR_MAX_DUPES];
+    unsigned num_dupes;
     
     // Not part of the state in ns3 but fits here mostly
     uint16_t ansn;
@@ -267,6 +286,7 @@ typedef struct
     double lat;            ///< Latitude for node_id
     union message_type mt; ///< Union for message type
     unsigned long target;  ///< Target index into g_tw_lp
+    uint16_t seq_num;      ///< Sequence number for this message
 } olsr_msg_data;
 
 
