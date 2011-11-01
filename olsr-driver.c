@@ -833,7 +833,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             //tw_event_send(e);
             
-            e = tw_event_new(lp->gid, HELLO_INTERVAL, lp);
+            e = tw_event_new(lp->gid, TC_INTERVAL, lp);
             msg = tw_event_data(e);
             msg->type = TC_TX;
             msg->originator = s->local_address;

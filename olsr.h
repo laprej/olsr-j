@@ -30,6 +30,7 @@
 #define TOP_HOLD_TIME (3*TC_INTERVAL)
 #define SA_INTERVAL 10
 #define MASTER_SA_INTERVAL 60
+#define OLSR_DUP_HOLD_TIME 30
 
 /** max neighbors (for array implementation) */
 #define OLSR_MAX_NEIGHBORS 16
