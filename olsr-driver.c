@@ -363,6 +363,19 @@ void RoutingTableComputation(node_state *s)
     }
 }
 
+dup_tuple * FindDuplicateTuple(o_addr addr, uint16_t seq_num, node_state *s)
+{
+    int i;
+    
+    for (i = 0; i < s->num_dupes; i++) {
+        if (s->dupSet[i].address == addr && s->dupSet[i].sequenceNumber == seq_num) {
+            return &s->dupSet[i];
+        }
+    }
+    
+    return NULL;
+}
+
 /**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
