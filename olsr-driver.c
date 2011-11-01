@@ -376,6 +376,109 @@ dup_tuple * FindDuplicateTuple(o_addr addr, uint16_t seq_num, node_state *s)
     return NULL;
 }
 
+void send_rr_rx()
+{
+    
+}
+
+void printTC(TC *t)
+{
+    int i;
+    
+    printf("TC %p: \tANSN: %d has %d neighbors\n", t, t->ansn, t->num_mpr_sel);
+    for (i = 0; i < t->num_mpr_sel; i++) {
+        printf("   neighborAddresses[%d]: %lu\n", i, t->neighborAddresses[i]);
+    }
+}
+
+///
+/// \brief OLSR's default forwarding algorithm.
+///
+/// See RFC 3626 for details.
+///
+/// \param p the %OLSR packet which has been received.
+/// \param msg the %OLSR message which must be forwarded.
+/// \param dup_tuple NULL if the message has never been considered for forwarding,
+/// or a duplicate tuple in other case.
+/// \param local_iface the address of the interface where the message was received from.
+///
+void ForwardDefault(olsr_msg_data *olsrMessage,
+                    dup_tuple *duplicated,
+                    o_addr localIface,
+                    o_addr senderAddress,
+                    node_state *s,
+                    tw_lp *lp)
+{
+    int i;
+    int j;
+    TC *t;
+    tw_event *e;
+    tw_stime ts;
+    tw_lp *cur_lp;
+    olsr_msg_data *msg;
+    
+    // If the message has already been considered for forwarding,
+    // it must not be retransmitted again
+    if (duplicated != NULL && duplicated->retransmitted)
+    {
+        return;
+    }
+    
+    // If the sender interface address is an interface address
+    // of a MPR selector of this node and ttl is greater than 1,
+    // the message must be retransmitted
+    int retransmitted = 0;
+    for (i = 0; i < s->num_mpr_sel; i++) {
+        if (s->mprSelSet[i].mainAddr == senderAddress) {
+            // Round-robin-RX
+            // Might want to rename HELLO_DELTA...
+            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            ts += 1;
+            
+            cur_lp = g_tw_lp[0];
+            
+            e = tw_event_new(cur_lp->gid, ts, lp);
+            msg = tw_event_data(e);
+            msg->type = TC_RX;
+            msg->ttl = olsrMessage->ttl - 1;
+            msg->originator = olsrMessage->originator;
+            msg->sender = s->local_address;
+            msg->lng = olsrMessage->lng;
+            msg->lat = olsrMessage->lat;
+            msg->target = 0;
+            t = &msg->mt.t;
+            t->ansn = olsrMessage->mt.t.ansn;
+            t->num_mpr_sel = olsrMessage->mt.t.num_mpr_sel;
+            for (j = 0; j < t->num_mpr_sel; j++) {
+                t->neighborAddresses[j] = olsrMessage->mt.t.neighborAddresses[j];
+            }
+            //if (t->num_mpr_sel > 0) {
+            printTC(t);
+            tw_event_send(e);
+            //}
+            //tw_event_send(e);
+            
+            
+            retransmitted = 1;
+            // TODO: Check if ns3 stuff is required here...  Possibly
+            // actually do the retransmission here.
+        }
+    }
+    
+    if (duplicated != NULL) {
+        duplicated->expirationTime = tw_now(lp) + OLSR_DUP_HOLD_TIME;
+        duplicated->retransmitted = retransmitted;
+    }
+    else {
+        s->dupSet[s->num_dupes].address = olsrMessage->originator;
+        s->dupSet[s->num_dupes].sequenceNumber = olsrMessage->seq_num;
+        s->dupSet[s->num_dupes].expirationTime = tw_now(lp) + OLSR_DUP_HOLD_TIME;
+        s->dupSet[s->num_dupes].retransmitted = retransmitted;
+        s->num_dupes++;
+        assert(s->num_dupes < OLSR_MAX_DUPES);
+    }
+}
+
 /**
  * Event handler.  Basically covers two events at the moment:
  * - HELLO_TX: HELLO transmit required now, so package up all of our
@@ -841,9 +944,10 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             for (j = 0; j < s->num_mpr_sel; j++) {
                 t->neighborAddresses[j] = s->mprSelSet[j].mainAddr;
             }
-            if (s->num_mpr_sel > 0) {
-                tw_event_send(e);
-            }
+            //if (s->num_mpr_sel > 0) {
+            printTC(t);
+            tw_event_send(e);
+            //}
             //tw_event_send(e);
             
             e = tw_event_new(lp->gid, TC_INTERVAL, lp);
@@ -854,6 +958,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->lat = s->lat;
             t = &msg->mt.t;
             t->num_mpr_sel = 0;
+            printTC(t);
             tw_event_send(e);
             
             break;
@@ -893,6 +998,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 for (j = 0; j < t->num_mpr_sel; j++) {
                     t->neighborAddresses[j] = m->mt.t.neighborAddresses[j];
                 }
+                printTC(t);
                 tw_event_send(e);
             }
             
@@ -910,6 +1016,15 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             
             // BEGIN TC PROCESSING
+            
+            //int do_forwarding = 1;
+            dup_tuple *duplicated = FindDuplicateTuple(m->originator, m->seq_num, s);
+            
+            if (duplicated != NULL) {
+                break;
+            }
+            
+            ForwardDefault(m, duplicated, s->local_address, m->sender, s, lp);
             
             in = 0;
             
