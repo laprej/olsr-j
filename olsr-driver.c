@@ -68,18 +68,19 @@ void olsr_init(node_state *s, tw_lp *lp)
     msg->lng = s->lng;
     msg->lat = s->lat;
     t = &msg->mt.t;
-    t->num_mpr_sel = 0;
+    //t->num_mpr_sel = 0;
+    t->num_neighbors = 0;
     tw_event_send(e);
     
-    // Build our initial SA_TX messages
-    ts = tw_rand_unif(lp->rng) * STAGGER_MAX + SA_INTERVAL;
-    e = tw_event_new(lp->gid, ts, lp);
-    msg = tw_event_data(e);
-    msg->type = SA_TX;
-    msg->originator = s->local_address;
-    msg->lng = s->lng;
-    msg->lat = s->lat;
-    tw_event_send(e);
+//    // Build our initial SA_TX messages
+//    ts = tw_rand_unif(lp->rng) * STAGGER_MAX + SA_INTERVAL;
+//    e = tw_event_new(lp->gid, ts, lp);
+//    msg = tw_event_data(e);
+//    msg->type = SA_TX;
+//    msg->originator = s->local_address;
+//    msg->lng = s->lng;
+//    msg->lat = s->lat;
+//    tw_event_send(e);
 }
 
 #define RANGE 40.0
@@ -174,7 +175,9 @@ static inline void remove_node_from_n2(o_addr n)
         if (index_to_remove == -1) break;
         
         //printf("Removing %d\n", index_to_remove);
-        g_mpr_two_hop[index_to_remove] = g_mpr_two_hop[g_num_two_hop-1];
+        g_mpr_two_hop[index_to_remove].expirationTime = g_mpr_two_hop[g_num_two_hop-1].expirationTime;
+        g_mpr_two_hop[index_to_remove].neighborMainAddr = g_mpr_two_hop[g_num_two_hop-1].neighborMainAddr;
+        g_mpr_two_hop[index_to_remove].twoHopNeighborAddr = g_mpr_two_hop[g_num_two_hop-1].twoHopNeighborAddr;
         g_num_two_hop--;
     }
 }
@@ -193,6 +196,25 @@ void mpr_set_uniq(node_state *s)
     for (i = 0; i < s->num_mpr - 1; i++) {
         if (s->mprSet[i] == last) {
             s->num_mpr--;
+            return;
+        }
+    }
+}
+
+/**
+ * Ensure that all nodes in MPR selector set are unique (hence "set")
+ */
+void mpr_sel_set_uniq(node_state *s)
+{
+    int i;
+    
+    // Presumably if we just added a MPR, we only need to check all the
+    // others against the last one
+    o_addr last = s->mprSelSet[s->num_mpr_sel-1].mainAddr;
+    
+    for (i = 0; i < s->num_mpr_sel - 1; i++) {
+        if (s->mprSelSet[i].mainAddr == last) {
+            s->num_mpr_sel--;
             return;
         }
     }
@@ -232,7 +254,10 @@ void EraseOlderTopologyTuples(o_addr last, uint16_t ansn, node_state *s)
         
         if (index_to_remove == -1) break;
         
-        s->topSet[index_to_remove] = s->topSet[s->num_top_set-1];
+        s->topSet[index_to_remove].destAddr = s->topSet[s->num_top_set-1].destAddr;
+        s->topSet[index_to_remove].expirationTime = s->topSet[s->num_top_set-1].expirationTime;
+        s->topSet[index_to_remove].lastAddr = s->topSet[s->num_top_set-1].lastAddr;
+        s->topSet[index_to_remove].sequenceNumber = s->topSet[s->num_top_set-1].sequenceNumber;
         s->num_top_set--;
     }
 }
@@ -347,13 +372,21 @@ void RoutingTableComputation(node_state *s)
         int added = 0;
         
         for (i = 0; i < s->num_top_set; i++) {
+            //printf("Looking at node %lu top_tuple[%d] dest: %lu, last: %lu, seq: %d\n", s->local_address, i, s->topSet[i].destAddr, s->topSet[i].lastAddr, s->topSet[i].sequenceNumber);
             RT_entry *destAddrEntry = Lookup(s, s->topSet[i].destAddr);
             RT_entry *lastAddrEntry = Lookup(s, s->topSet[i].lastAddr);
             if (!destAddrEntry && lastAddrEntry && lastAddrEntry->distance == h) {
                 s->route_table[s->num_routes].destAddr = s->topSet[i].destAddr;
                 s->route_table[s->num_routes].nextAddr = lastAddrEntry->nextAddr;
                 s->route_table[s->num_routes].distance = h + 1;
+                s->num_routes++;
+                assert(s->num_routes < OLSR_MAX_ROUTES);
                 added = 1;
+            }
+            else {
+                if (lastAddrEntry && !destAddrEntry) {
+                    //printf("Not right length!\n");
+                }
             }
         }
         
@@ -381,14 +414,16 @@ void send_rr_rx()
     
 }
 
-void printTC(TC *t)
+void printTC(TC *t, node_state *s)
 {
+//#ifdef JML_DEBUG
     int i;
     
-    printf("TC %p: \tANSN: %d has %d neighbors\n", t, t->ansn, t->num_mpr_sel);
-    for (i = 0; i < t->num_mpr_sel; i++) {
+    printf("Node %lu: \tANSN: %d has %d neighbors\n", s->local_address, t->ansn, t->num_neighbors);
+    for (i = 0; i < t->num_neighbors; i++) {
         printf("   neighborAddresses[%d]: %lu\n", i, t->neighborAddresses[i]);
     }
+//#endif /* JML_DEBUG */
 }
 
 ///
@@ -416,6 +451,12 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
     tw_stime ts;
     tw_lp *cur_lp;
     olsr_msg_data *msg;
+    
+    // If the sender interface address is not in the symmetric
+    // 1-hop neighborhood the message must not be forwarded
+    if (NULL == FindSymNeighborTuple(s, senderAddress)) {
+        return;
+    }
     
     // If the message has already been considered for forwarding,
     // it must not be retransmitted again
@@ -448,12 +489,13 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
             msg->target = 0;
             t = &msg->mt.t;
             t->ansn = olsrMessage->mt.t.ansn;
-            t->num_mpr_sel = olsrMessage->mt.t.num_mpr_sel;
-            for (j = 0; j < t->num_mpr_sel; j++) {
+            //t->num_mpr_sel = olsrMessage->mt.t.num_mpr_sel;
+            t->num_neighbors = olsrMessage->mt.t.num_neighbors;
+            for (j = 0; j < t->num_neighbors; j++) {
                 t->neighborAddresses[j] = olsrMessage->mt.t.neighborAddresses[j];
             }
             //if (t->num_mpr_sel > 0) {
-            printTC(t);
+            //printTC(t);
             tw_event_send(e);
             //}
             //tw_event_send(e);
@@ -915,6 +957,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                         // We should add this guy to the selector set
                         s->mprSelSet[s->num_mpr_sel].mainAddr = m->originator;
                         s->num_mpr_sel++;
+                        mpr_sel_set_uniq(s);
                     }
                 }
             }
@@ -940,12 +983,13 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->target = 0;
             t = &msg->mt.t;
             t->ansn = s->ansn;
-            t->num_mpr_sel = s->num_mpr_sel;
-            for (j = 0; j < s->num_mpr_sel; j++) {
-                t->neighborAddresses[j] = s->mprSelSet[j].mainAddr;
+            //t->num_mpr_sel = s->num_mpr_sel;
+            t->num_neighbors = s->num_neigh;
+            for (j = 0; j < s->num_neigh; j++) {
+                t->neighborAddresses[j] = s->neighSet[j].neighborMainAddr;
             }
             //if (s->num_mpr_sel > 0) {
-            printTC(t);
+            //printTC(t);
             tw_event_send(e);
             //}
             //tw_event_send(e);
@@ -957,8 +1001,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->lng = s->lng;
             msg->lat = s->lat;
             t = &msg->mt.t;
-            t->num_mpr_sel = 0;
-            printTC(t);
+            //t->num_mpr_sel = 0;
+            t->num_neighbors = 0;
+            //printTC(t);
             tw_event_send(e);
             
             break;
@@ -994,11 +1039,12 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 msg->target = m->target + 1;
                 t = &msg->mt.t;
                 t->ansn = m->mt.t.ansn;
-                t->num_mpr_sel = m->mt.t.num_mpr_sel;
-                for (j = 0; j < t->num_mpr_sel; j++) {
+                //t->num_mpr_sel = m->mt.t.num_mpr_sel;
+                t->num_neighbors = m->mt.t.num_neighbors;
+                for (j = 0; j < t->num_neighbors; j++) {
                     t->neighborAddresses[j] = m->mt.t.neighborAddresses[j];
                 }
-                printTC(t);
+                //printTC(t);
                 tw_event_send(e);
             }
             
@@ -1053,9 +1099,11 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // MUST be removed from the topology set.
             EraseOlderTopologyTuples(m->originator, m->mt.t.ansn, s);
             
+            printTC(&m->mt.t, s);
+            
             // 4. For each of the advertised neighbor main address received in
             // the TC message:
-            for (i = 0; i < m->mt.t.num_mpr_sel; i++) {
+            for (i = 0; i < m->mt.t.num_neighbors; i++) {
                 o_addr addr = m->mt.t.neighborAddresses[i];
                 // 4.1. If there exist some tuple in the topology set where:
                 //        T_dest_addr == advertised neighbor main address, AND
@@ -1148,6 +1196,12 @@ void olsr_final(node_state *s, tw_lp *lp)
         printf("   route[%d]: dest: %lu \t next %lu \t distance %d\n",
                i, s->route_table[i].destAddr,
                s->route_table[i].nextAddr, s->route_table[i].distance);
+    }
+    
+    printf("node %lu top tuples\n", s->local_address);
+    for (i = 0; i < s->num_top_set; i++) {
+        printf("   top_tuple[%d] dest: %lu   last:  %lu   seq:   %d\n",
+               i, s->topSet[i].destAddr, s->topSet[i].lastAddr, s->topSet[i].sequenceNumber);
     }
 }
 

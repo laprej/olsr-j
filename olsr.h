@@ -123,7 +123,7 @@ typedef struct /* Tc */
 {
     uint16_t ansn;
     o_addr neighborAddresses[OLSR_MAX_TOP_TUPLES];
-    unsigned num_mpr_sel;
+    unsigned num_neighbors;
 } TC;
 
 
