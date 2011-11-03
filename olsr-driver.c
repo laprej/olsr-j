@@ -9,6 +9,9 @@
  * Simple driver to test out various functionalities in the OLSR impl.
  */
 
+double g_X[OLSR_MAX_NEIGHBORS];
+double g_Y[OLSR_MAX_NEIGHBORS];
+
 #define GRID_MAX 100
 #define STAGGER_MAX 10
 #define HELLO_DELTA 0.0001
@@ -46,6 +49,9 @@ void olsr_init(node_state *s, tw_lp *lp)
     s->local_address = lp->gid;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
+    
+    g_X[s->local_address] = s->lng;
+    g_Y[s->local_address] = s->lat;
     
     // Build our initial HELLO_TX messages
     ts = tw_rand_unif(lp->rng) * STAGGER_MAX;
@@ -414,16 +420,25 @@ void send_rr_rx()
     
 }
 
-void printTC(TC *t, node_state *s)
+void printTC(olsr_msg_data *m, node_state *s)
 {
-//#ifdef JML_DEBUG
+#ifdef JML_DEBUG
     int i;
     
-    printf("Node %lu: \tANSN: %d has %d neighbors\n", s->local_address, t->ansn, t->num_neighbors);
-    for (i = 0; i < t->num_neighbors; i++) {
-        printf("   neighborAddresses[%d]: %lu\n", i, t->neighborAddresses[i]);
+    printf("Node %lu has %d neighbors:\n", s->local_address, s->num_neigh);
+    for (i = 0; i < s->num_neigh; i++) {
+        printf("   neighbor %lu\n", s->neighSet[i].neighborMainAddr);
     }
-//#endif /* JML_DEBUG */
+    printf("Received TC message with %d neighbors of node %lu\n",
+           m->mt.t.num_neighbors, m->originator);
+    for (i = 0; i < m->mt.t.num_neighbors; i++) {
+        printf("   TC-NEIGH %lu\n", m->mt.t.neighborAddresses[i]);
+    }
+    printf("\n");
+    
+#endif /* JML_DEBUG */
+    
+    //printf("Node %lu just heard a TC from %lu\n", s->local_address, m->originator);
 }
 
 ///
@@ -1015,8 +1030,10 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // 2b. If the TTL>0, then the router decrements the TTL by 1, and then forwards the packet.
             // From http://www.dslreports.com/forum/r25655787-When-is-TTL-Decremented-by-a-Router-
             
-            if (m->ttl == 0)
+            if (m->ttl == 0) {
+                printf("TTL Expired\n");
                 return;
+            }
             
             m->ttl--;
             
@@ -1052,10 +1069,10 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // regardless of whether or not it can be heard, handled, etc.
             
             // Check to see if we can hear this message or not
-            if (out_of_radio_range(s, m)) {
-                //printf("Out of range!\n");
-                return;
-            }
+//            if (out_of_radio_range(s, m)) {
+//                //printf("Out of range!\n");
+//                return;
+//            }
             
             if (s->local_address == m->originator) {
                 return;
@@ -1067,7 +1084,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             dup_tuple *duplicated = FindDuplicateTuple(m->originator, m->seq_num, s);
             
             if (duplicated != NULL) {
-                break;
+                //break;
             }
             
             ForwardDefault(m, duplicated, s->local_address, m->sender, s, lp);
@@ -1099,7 +1116,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // MUST be removed from the topology set.
             EraseOlderTopologyTuples(m->originator, m->mt.t.ansn, s);
             
-            printTC(&m->mt.t, s);
+            printTC(m, s);
             
             // 4. For each of the advertised neighbor main address received in
             // the TC message:
@@ -1203,6 +1220,14 @@ void olsr_final(node_state *s, tw_lp *lp)
         printf("   top_tuple[%d] dest: %lu   last:  %lu   seq:   %d\n",
                i, s->topSet[i].destAddr, s->topSet[i].lastAddr, s->topSet[i].sequenceNumber);
     }
+    
+    for (i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
+        if (sqrt((s->lng - g_X[i]) * (s->lng - g_X[i]) +
+                 (s->lat - g_Y[i]) * (s->lat - g_Y[i])) > RANGE) {
+            printf("%lu and %d are out of range.\n", s->local_address, i);
+        }
+    }
+    printf("\n");
 }
 
 tw_peid olsr_map(tw_lpid gid)

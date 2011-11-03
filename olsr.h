@@ -35,7 +35,7 @@
 /** max neighbors (for array implementation) */
 #define OLSR_MAX_NEIGHBORS 16
 #define OLSR_MAX_2_HOP (3 * OLSR_MAX_NEIGHBORS)
-#define OLSR_MAX_TOP_TUPLES (3 * OLSR_MAX_NEIGHBORS)
+#define OLSR_MAX_TOP_TUPLES (16 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_ROUTES (3 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_DUPES 32
 
