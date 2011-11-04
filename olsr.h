@@ -283,8 +283,8 @@ typedef struct
     uint8_t ttl;           ///< The Time To Live field for this packet
     o_addr originator;     ///< Node responsible for this event
     o_addr sender;         ///< Node to last touch this message (TC)
-    double lng;            ///< Longitude for node_id
-    double lat;            ///< Latitude for node_id
+    double lng;            ///< Longitude for 'sender' (above)
+    double lat;            ///< Latitude for 'sender' (above)
     union message_type mt; ///< Union for message type
     unsigned long target;  ///< Target index into g_tw_lp
     uint16_t seq_num;      ///< Sequence number for this message

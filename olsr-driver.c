@@ -499,8 +499,8 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
             msg->ttl = olsrMessage->ttl - 1;
             msg->originator = olsrMessage->originator;
             msg->sender = s->local_address;
-            msg->lng = olsrMessage->lng;
-            msg->lat = olsrMessage->lat;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
             msg->target = 0;
             t = &msg->mt.t;
             t->ansn = olsrMessage->mt.t.ansn;
@@ -1069,10 +1069,10 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // regardless of whether or not it can be heard, handled, etc.
             
             // Check to see if we can hear this message or not
-//            if (out_of_radio_range(s, m)) {
-//                //printf("Out of range!\n");
-//                return;
-//            }
+            if (out_of_radio_range(s, m)) {
+                //printf("Out of range!\n");
+                return;
+            }
             
             if (s->local_address == m->originator) {
                 return;
