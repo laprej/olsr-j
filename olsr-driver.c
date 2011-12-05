@@ -595,6 +595,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     
     switch(m->type) {
         case HELLO_TX:
+        {
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
             cur_lp = g_tw_lp[region(s->local_address)*OLSR_MAX_NEIGHBORS];
@@ -640,9 +641,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             tw_event_send(e);
             
             break;
-            
+        }
         case HELLO_RX:
-            
+        {
             h = &m->mt.h;
             
             in = 0;
@@ -1021,8 +1022,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // END MPR SELECTOR SET
             
             break;
-            
+        }
         case TC_TX:
+        {
             // Might want to rename HELLO_DELTA...
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
@@ -1064,9 +1066,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             tw_event_send(e);
             
             break;
-            
+        }
         case TC_RX:
-            
+        {
             // 1. When a packet arrives at the router, the router evaluates the TTL.
             // 2a. If the TTL=0, the router drops the packet, and sends an ICMP TTL Exceeded message to the source.
             // 2b. If the TTL>0, then the router decrements the TTL by 1, and then forwards the packet.
@@ -1197,15 +1199,15 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             
             break;
-            
+        }
+        case SA_TX:
+        {
             /*
              Situational awareness - every 10 seconds send a UDP packet
              containing a node's location to a specified node with an
              uplink.  Every 60 seconds, that uplink sends a message containing
              all nodes' locations.
-             */
-        case SA_TX:
-            
+             */    
             // Schedule ourselves again...
             ts = SA_INTERVAL;
             e = tw_event_new(lp->gid, ts, lp);
@@ -1251,9 +1253,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             // We don't need to compute our routing table here so just return!
             return;
-            
+        }
         case SA_RX:
-            
+        {
             // 1. When a packet arrives at the router, the router evaluates the TTL.
             // 2a. If the TTL=0, the router drops the packet, and sends an ICMP TTL Exceeded message to the source.
             // 2b. If the TTL>0, then the router decrements the TTL by 1, and then forwards the packet.
@@ -1337,6 +1339,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             // We don't need to compute our routing table here so just return!
             return;
+        }
     }
     
     RoutingTableComputation(s);
