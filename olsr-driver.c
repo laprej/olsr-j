@@ -832,7 +832,8 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                             // We don't do that, we use bitfields.  Make sure
                             // our assumptions are correct then create a mask
                             //printf("%lu\n", g_mpr_two_hop[j].neighborMainAddr);
-                            assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
+                            //assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
+                            assert(region(g_mpr_two_hop[j].neighborMainAddr) == region(s->local_address));
                             BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr);
                         }
                     }
@@ -901,8 +902,9 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     }
                     // Make sure our neighbors are from our region
                     //assert(g_mpr_one_hop[i].neighborMainAddr < OLSR_MAX_NEIGHBORS);
-                    assert(g_mpr_one_hop[i].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS + OLSR_MAX_NEIGHBORS);
-                    assert(g_mpr_one_hop[i].neighborMainAddr >= region(s->local_address)*OLSR_MAX_NEIGHBORS);
+                    //assert(g_mpr_one_hop[i].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS + OLSR_MAX_NEIGHBORS);
+                    //assert(g_mpr_one_hop[i].neighborMainAddr >= region(s->local_address)*OLSR_MAX_NEIGHBORS);
+                    assert(region(g_mpr_one_hop[i].neighborMainAddr) == region(s->local_address));
                     g_reachability[i] = r;
                 }
                 
@@ -984,7 +986,8 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                             //coveredTwoHopNeighbors.insert (otherTwoHopNeigh->twoHopNeighborAddr);
                             // We don't do that, we use bitfields.  Make sure
                             // our assumptions are correct then create a mask
-                            assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
+                            //assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
+                            assert(region(g_mpr_two_hop[j].neighborMainAddr) == region(s->local_address));
                             BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr);
                         }
                     }
