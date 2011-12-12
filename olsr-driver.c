@@ -1389,12 +1389,14 @@ void olsr_final(node_state *s, tw_lp *lp)
                i, s->topSet[i].destAddr, s->topSet[i].lastAddr, s->topSet[i].sequenceNumber);
     }
     
+    /*
     for (i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
         if (sqrt((s->lng - g_X[i]) * (s->lng - g_X[i]) +
                  (s->lat - g_Y[i]) * (s->lat - g_Y[i])) > RANGE) {
             printf("%lu and %d are out of range.\n", s->local_address, i);
         }
     }
+    */
     printf("\n");
 }
 
