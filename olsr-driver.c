@@ -28,7 +28,7 @@ unsigned g_reachability[OLSR_MAX_NEIGHBORS];
 neigh_tuple g_mpr_neigh_to_add;
 unsigned g_mpr_num_add_nodes;
 char g_covered[BITNSLOTS(OLSR_MAX_NEIGHBORS)];
-int SA_per_node[2*OLSR_MAX_NEIGHBORS];
+//int SA_per_node[2*OLSR_MAX_NEIGHBORS];
 
 unsigned region(o_addr a)
 {
@@ -52,14 +52,17 @@ void olsr_init(node_state *s, tw_lp *lp)
     s->num_mpr = 0;
     s->num_mpr_sel = 0;
     s->num_top_set = 0;
+    for (int i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
+        s->SA_per_node[i] = 0;
+    }
     // Now we store the GID as opposed to an int from 0-OMN
     s->local_address = lp->gid;// % OLSR_MAX_NEIGHBORS;
     s->lng = tw_rand_unif(lp->rng) * GRID_MAX;
     s->lat = tw_rand_unif(lp->rng) * GRID_MAX;
     printf("Initializing node %lu on CPU %llu\n", lp->gid, lp->pe->id);
     
-    g_X[s->local_address] = s->lng;
-    g_Y[s->local_address] = s->lat;
+    //g_X[s->local_address] = s->lng;
+    //g_Y[s->local_address] = s->lat;
     
     // Build our initial HELLO_TX messages
     ts = tw_rand_unif(lp->rng) * STAGGER_MAX;
@@ -502,8 +505,7 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             ts += 1;
             
-            //cur_lp = g_tw_lp[0];
-            cur_lp = g_tw_lp[region(s->local_address)*OLSR_MAX_NEIGHBORS];
+            cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
@@ -566,9 +568,9 @@ void route_packet(node_state *s, tw_event *e)
     tw_event_send(e);
 }
 
-void process_sa(olsr_msg_data *m)
+void process_sa(node_state *s, olsr_msg_data *m)
 {
-    SA_per_node[m->originator]++;
+    s->SA_per_node[m->originator % OLSR_MAX_NEIGHBORS]++;
 }
 
 /**
@@ -598,7 +600,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
         {
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
-            cur_lp = g_tw_lp[region(s->local_address)*OLSR_MAX_NEIGHBORS];
+            cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
@@ -606,7 +608,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->originator = m->originator;
             msg->lng = s->lng;
             msg->lat = s->lat;
-            msg->target = region(s->local_address) * OLSR_MAX_NEIGHBORS;
+            msg->target = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS)->gid;
             h = &msg->mt.h;
             h->num_neighbors = s->num_neigh;// + 1;
             //h->neighbor_addrs[0] = s->local_address;
@@ -656,7 +658,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
                 ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
-                tw_lp *cur_lp = g_tw_lp[m->target + 1];
+                tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
                 e = tw_event_new(cur_lp->gid, ts, lp);
                 msg = tw_event_data(e);
@@ -832,8 +834,8 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                             // We don't do that, we use bitfields.  Make sure
                             // our assumptions are correct then create a mask
                             //printf("%lu\n", g_mpr_two_hop[j].neighborMainAddr);
-                            assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
-                            BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr);
+                            assert(region(g_mpr_two_hop[j].neighborMainAddr) == region(s->local_address));
+                            BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr % OLSR_MAX_NEIGHBORS);
                         }
                     }
                 }
@@ -857,7 +859,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 //            }
             // Remove the nodes from N2 which are now covered by a node in the MPR set.
             for (i = 0; i < g_num_two_hop; i++) {
-                if (BITTEST(g_covered, g_mpr_two_hop[i].twoHopNeighborAddr)) {
+                if (BITTEST(g_covered, g_mpr_two_hop[i].twoHopNeighborAddr % OLSR_MAX_NEIGHBORS)) {
                     //printf("1. g_num_two_hop is %d\n", g_num_two_hop);
                     remove_node_from_n2(g_mpr_two_hop[i].twoHopNeighborAddr);
                     //printf("2. g_num_two_hop is %d\n", g_num_two_hop);
@@ -900,9 +902,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                             r++;
                     }
                     // Make sure our neighbors are from our region
-                    //assert(g_mpr_one_hop[i].neighborMainAddr < OLSR_MAX_NEIGHBORS);
-                    assert(g_mpr_one_hop[i].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS + OLSR_MAX_NEIGHBORS);
-                    assert(g_mpr_one_hop[i].neighborMainAddr >= region(s->local_address)*OLSR_MAX_NEIGHBORS);
+                    assert(region(g_mpr_one_hop[i].neighborMainAddr) == region(s->local_address));
                     g_reachability[i] = r;
                 }
                 
@@ -984,15 +984,15 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                             //coveredTwoHopNeighbors.insert (otherTwoHopNeigh->twoHopNeighborAddr);
                             // We don't do that, we use bitfields.  Make sure
                             // our assumptions are correct then create a mask
-                            assert(g_mpr_two_hop[j].neighborMainAddr < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS);
-                            BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr);
+                            assert(region(g_mpr_two_hop[j].neighborMainAddr) == region(s->local_address));
+                            BITSET(g_covered, g_mpr_two_hop[j].twoHopNeighborAddr % OLSR_MAX_NEIGHBORS);
                         }
                     }
                 }
                 
                 // Remove the nodes from N2 which are now covered by a node in the MPR set.
                 for (i = 0; i < g_num_two_hop; i++) {
-                    if (BITTEST(g_covered, g_mpr_two_hop[i].twoHopNeighborAddr)) {
+                    if (BITTEST(g_covered, g_mpr_two_hop[i].twoHopNeighborAddr % OLSR_MAX_NEIGHBORS)) {
                         //printf("1. g_num_two_hop is %d\n", g_num_two_hop);
                         remove_node_from_n2(g_mpr_two_hop[i].twoHopNeighborAddr);
                         //printf("2. g_num_two_hop is %d\n", g_num_two_hop);
@@ -1028,8 +1028,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // Might want to rename HELLO_DELTA...
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
-            //cur_lp = g_tw_lp[0];
-            cur_lp = g_tw_lp[region(s->local_address)*OLSR_MAX_NEIGHBORS];
+            cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
             e = tw_event_new(cur_lp->gid, ts, lp);
             msg = tw_event_data(e);
@@ -1039,7 +1038,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->sender = s->local_address;
             msg->lng = s->lng;
             msg->lat = s->lat;
-            msg->target = region(s->local_address) * OLSR_MAX_NEIGHBORS;
+            msg->target = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS)->gid;
             t = &msg->mt.t;
             t->ansn = s->ansn;
             //t->num_mpr_sel = s->num_mpr_sel;
@@ -1087,8 +1086,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
                 ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
-                //tw_lp *cur_lp = g_tw_lp[m->target + 1];
-                tw_lp *cur_lp = g_tw_lp[m->target + 1];
+                tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
                 e = tw_event_new(cur_lp->gid, ts, lp);
                 msg = tw_event_data(e);
@@ -1223,15 +1221,14 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // Check and see if we are the destination...
             if (m->destination == s->local_address) {
                 // This is the final stop
-                process_sa(m);
+                process_sa(s, m);
                 return;
             }
             
             // Might want to rename HELLO_DELTA...
             ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
             
-            //cur_lp = g_tw_lp[0];
-            cur_lp = g_tw_lp[region(s->local_address)*OLSR_MAX_NEIGHBORS];
+            cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
             // If we don't have a route, don't allocate an event!
             if (Lookup(s, MASTER_NODE) == NULL) {
@@ -1269,7 +1266,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // Check and see if we are the destination...
             if (m->destination == s->local_address) {
                 // This is the final stop
-                process_sa(m);
+                process_sa(s, m);
                 return;
             }
             
@@ -1279,8 +1276,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
                 ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
                 
-                //tw_lp *cur_lp = g_tw_lp[m->target + 1];
-                tw_lp *cur_lp = g_tw_lp[m->target + 1];
+                tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
                 e = tw_event_new(cur_lp->gid, ts, lp);
                 msg = tw_event_data(e);
@@ -1349,7 +1345,11 @@ void olsr_final(node_state *s, tw_lp *lp)
 {
     int i;
     
-    printf("node %lu had %d SA packets received.\n", s->local_address, SA_per_node[s->local_address]);
+    if (s->local_address % OLSR_MAX_NEIGHBORS == 0) {
+        for (i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
+            printf("node %lu had %d SA packets received.\n", s->local_address, s->SA_per_node[i]);
+        }
+    }
     
     printf("node %lu contains %d neighbors\n", s->local_address, s->num_neigh);
     printf("x: %f   \ty: %f\n", s->lng, s->lat);
@@ -1429,13 +1429,9 @@ int olsr_main(int argc, char *argv[])
 {
     int i;
     
-    for (i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
-        SA_per_node[i] = 0;
-    }
+    g_tw_lookahead = HELLO_INTERVAL * 1024;
     
-    g_tw_lookahead = HELLO_INTERVAL * 2;
-    
-    g_tw_events_per_pe = nlp_per_pe * nlp_per_pe * 32 + 32768*5;
+    g_tw_events_per_pe =  nlp_per_pe * 32 + 32768*5;
     
     tw_opt_add(olsr_opts);
     

@@ -34,7 +34,7 @@
 
 /** max neighbors (for array implementation) */
 #define OLSR_MAX_NEIGHBORS 16
-#define OLSR_MAX_2_HOP (8 * OLSR_MAX_NEIGHBORS)
+#define OLSR_MAX_2_HOP (16 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_TOP_TUPLES (16 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_ROUTES (3 * OLSR_MAX_NEIGHBORS)
 #define OLSR_MAX_DUPES 32
@@ -273,6 +273,7 @@ typedef struct /*OlsrState */
     
     // Not part of the state in ns3 but fits here mostly
     uint16_t ansn;
+    int SA_per_node[OLSR_MAX_NEIGHBORS];
     
 } node_state;
 
