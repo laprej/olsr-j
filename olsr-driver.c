@@ -1428,7 +1428,6 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
         }
         case SA_MASTER_TX:
         {
-            printf("originator is %lu\n", m->originator);
             // Schedule ourselves again...
             ts = MASTER_SA_INTERVAL;
             e = tw_event_new(lp->gid, ts, lp);
@@ -1457,7 +1456,6 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
         }
         case SA_MASTER_RX:
         {
-            printf("RECEIVED SA_MASTER\n");
             return;
         }
     }
