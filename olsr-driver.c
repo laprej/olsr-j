@@ -101,6 +101,20 @@ void olsr_init(node_state *s, tw_lp *lp)
     msg->lng = s->lng;
     msg->lat = s->lat;
     tw_event_send(e);
+    
+    // Build our initial SA_MASTER_TX messages
+    if (s->local_address == MASTER_NODE) {
+        ts = tw_rand_unif(lp->rng) * MASTER_SA_INTERVAL + MASTER_SA_INTERVAL;
+        e = tw_event_new(lp->gid, ts, lp);
+        msg = tw_event_data(e);
+        msg->type = SA_MASTER_TX;
+        msg->originator = s->local_address;
+        // Always send these to node zero, who receives all SA_MASTER msgs
+        msg->destination = 0;
+        msg->lng = s->lng;
+        msg->lat = s->lat;
+        tw_event_send(e);
+    }
 }
 
 /**
@@ -1410,6 +1424,40 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             
             
             // We don't need to compute our routing table here so just return!
+            return;
+        }
+        case SA_MASTER_TX:
+        {
+            printf("originator is %lu\n", m->originator);
+            // Schedule ourselves again...
+            ts = MASTER_SA_INTERVAL;
+            e = tw_event_new(lp->gid, ts, lp);
+            msg = tw_event_data(e);
+            msg->type = SA_MASTER_TX;
+            msg->originator = s->local_address;
+            // Always send these to node zero, who receives all SA_MASTER msgs
+            msg->destination = 0;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            tw_event_send(e);
+                        
+            // Send it on to node 0
+            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            e = tw_event_new(0, ts, lp);
+            msg = tw_event_data(e);
+            msg->type = SA_MASTER_RX;
+            msg->originator = s->local_address;
+            msg->sender = s->local_address;
+            msg->destination = 0;
+            msg->lng = s->lng;
+            msg->lat = s->lat;
+            tw_event_send(e);
+            
+            return;
+        }
+        case SA_MASTER_RX:
+        {
+            printf("RECEIVED SA_MASTER\n");
             return;
         }
     }

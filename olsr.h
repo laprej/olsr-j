@@ -55,7 +55,9 @@ typedef enum {
     TC_RX,
     TC_TX,
     SA_RX,
-    SA_TX
+    SA_TX,
+    SA_MASTER_TX,
+    SA_MASTER_RX
 } olsr_ev_type;
 
 /**
