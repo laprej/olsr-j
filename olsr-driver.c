@@ -16,7 +16,10 @@ double g_Y[OLSR_MAX_NEIGHBORS];
 #define STAGGER_MAX 10
 #define HELLO_DELTA 0.0001
 #define OLSR_NO_FINAL_OUTPUT 1
-#define USE_RADIO_DISTANCE 0
+#define USE_RADIO_DISTANCE 1
+#define RWALK_INTERVAL 20
+
+#define DEBUG 0
 
 static unsigned int nlp_per_pe = OLSR_MAX_NEIGHBORS;
 
@@ -30,6 +33,9 @@ unsigned g_reachability[OLSR_MAX_NEIGHBORS];
 neigh_tuple g_mpr_neigh_to_add;
 unsigned g_mpr_num_add_nodes;
 char g_covered[BITNSLOTS(OLSR_MAX_NEIGHBORS)];
+char g_olsr_mobility = 'N';
+
+unsigned long long g_olsr_event_stats[OLSR_END_EVENT];
 
 unsigned region(o_addr a)
 {
@@ -54,6 +60,7 @@ void olsr_init(node_state *s, tw_lp *lp)
     s->num_mpr = 0;
     s->num_mpr_sel = 0;
     s->num_top_set = 0;
+    s->num_dupes = 0;
     for (i = 0; i < OLSR_MAX_NEIGHBORS; i++) {
         s->SA_per_node[i] = 0;
     }
@@ -102,6 +109,18 @@ void olsr_init(node_state *s, tw_lp *lp)
     msg->lat = s->lat;
     tw_event_send(e);
     
+    if (g_olsr_mobility != 'n' && g_olsr_mobility != 'N') {
+        // Build our initial RWALK_CHANGE messages
+        ts = tw_rand_unif(lp->rng) * RWALK_INTERVAL + 1.0;
+        e = tw_event_new(lp->gid, ts, lp);
+        msg = tw_event_data(e);
+        msg->type = RWALK_CHANGE;
+        msg->lng = tw_rand_unif(lp->rng) * GRID_MAX;
+        msg->lat = tw_rand_unif(lp->rng) * GRID_MAX;
+        tw_event_send(e);
+    }
+    
+#if 0 /* Source of instability */
     // Build our initial SA_MASTER_TX messages
     if (s->local_address == MASTER_NODE) {
         ts = tw_rand_unif(lp->rng) * MASTER_SA_INTERVAL + MASTER_SA_INTERVAL;
@@ -115,6 +134,7 @@ void olsr_init(node_state *s, tw_lp *lp)
         msg->lat = s->lat;
         tw_event_send(e);
     }
+#endif
 }
 
 /**
@@ -176,7 +196,8 @@ DoCalcRxPower (double txPowerDbm,
     {
         return txPowerDbm;
     }
-    double m_lambda = 3.0e8 / 2437000000.0; // (2.437 GHz, chan 6)
+    //double m_lambda = 3.0e8 / 2437000000.0; // (2.437 GHz, chan 6)
+    double m_lambda = 0.058; // Stolen from Ken's slides, ~ 5GHz
     double numerator = m_lambda * m_lambda;
     double denominator = 16 * M_PI * M_PI * distance * distance;// * m_systemLoss;
     double pr = 10 * log10 (numerator / denominator);
@@ -531,33 +552,59 @@ void AddDuplicate(o_addr originator,
                   uint16_t seq_num,
                   Time ts,
                   int retransmitted,
-                  node_state *s)
+                  node_state *s,
+                  tw_lp *lp)
 {
-  int i;
+    int i;
+    int index_to_remove;
+    Time exp = tw_now(lp);
     
-  if (s->num_dupes == OLSR_MAX_DUPES - 1) {
-    // Find the oldest and replace it
-    int oldest = 0;
+    while (1) {
+        index_to_remove = -1;
+        for (i = 0; i < s->num_dupes; i++) {
+            if (s->dupSet[i].expirationTime < exp) {
+                index_to_remove = i;
+                break;
+            }
+        }
         
-    for (i = 0; i < s->num_dupes; i++) {
-      if (s->dupSet[i].expirationTime < s->dupSet[oldest].expirationTime) {
-	oldest = i;
-      }
+        if (index_to_remove == -1) break;
+        
+        //printf("Expiring Dupe\n");
+        
+        s->dupSet[index_to_remove].address        = s->dupSet[s->num_dupes-1].address;
+        s->dupSet[index_to_remove].expirationTime = s->dupSet[s->num_dupes-1].expirationTime;
+        s->dupSet[index_to_remove].retransmitted  = s->dupSet[s->num_dupes-1].retransmitted;
+        s->dupSet[index_to_remove].sequenceNumber = s->dupSet[s->num_dupes-1].sequenceNumber;
+        s->num_dupes--;
     }
+    
+    if (s->num_dupes == OLSR_MAX_DUPES - 1) {
+        // Find the oldest and replace it
+        int oldest = 0;
         
-    s->dupSet[oldest].address = originator;
-    s->dupSet[oldest].sequenceNumber = seq_num;
-    s->dupSet[oldest].expirationTime = ts;
-    s->dupSet[oldest].retransmitted = retransmitted;
-  }
-  else {
-    s->dupSet[s->num_dupes].address = originator;
-    s->dupSet[s->num_dupes].sequenceNumber = seq_num;
-    s->dupSet[s->num_dupes].expirationTime = ts;
-    s->dupSet[s->num_dupes].retransmitted = retransmitted;
-    s->num_dupes++;
-    assert(s->num_dupes < OLSR_MAX_DUPES);
-  }
+        for (i = 0; i < s->num_dupes; i++) {
+            if (s->dupSet[i].expirationTime < s->dupSet[oldest].expirationTime) {
+                oldest = i;
+            }
+        }
+        
+        //printf("node %lu (lpid = %llu) evicting dup %d (%lu) at time %f\n", s->local_address, lp->gid,
+         //      oldest, s->dupSet[oldest].address, tw_now(lp));
+        
+        s->dupSet[oldest].address = originator;
+        s->dupSet[oldest].sequenceNumber = seq_num;
+        s->dupSet[oldest].expirationTime = ts;
+        s->dupSet[oldest].retransmitted = retransmitted;
+    }
+    else {
+        s->dupSet[s->num_dupes].address = originator;
+        s->dupSet[s->num_dupes].sequenceNumber = seq_num;
+        s->dupSet[s->num_dupes].expirationTime = ts;
+        s->dupSet[s->num_dupes].retransmitted = retransmitted;
+        s->num_dupes++;
+        assert(s->num_dupes < OLSR_MAX_DUPES);
+    }
 }
 
 void printTC(olsr_msg_data *m, node_state *s)
@@ -628,8 +675,8 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
         if (s->mprSelSet[i].mainAddr == senderAddress) {
             // Round-robin-RX
             // Might want to rename HELLO_DELTA...
-            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
-            ts += 1;
+            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
+            // ts += 1;
             
             cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
@@ -671,7 +718,7 @@ void ForwardDefault(olsr_msg_data *olsrMessage,
 		   olsrMessage->seq_num,
 		   tw_now(lp) + OLSR_DUP_HOLD_TIME,
 		   retransmitted,
-		   s);
+		   s, lp);
 
       //        s->dupSet[s->num_dupes].address = olsrMessage->originator;
       //        s->dupSet[s->num_dupes].sequenceNumber = olsrMessage->seq_num;
@@ -727,10 +774,19 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     tw_lp *cur_lp;
     olsr_msg_data *msg;
     
+#if DEBUG
+    if( lp->gid == 1023 ) {
+        printf("LP DUMP Node %llu on Rank %d at TS=%lf: S Local Address = %llu, M Type = %d,M Sender = %llu, M Originator = %llu \n", 
+               lp->gid, g_tw_mynode, tw_now(lp), s->local_address, m->type, m->sender, m->originator );
+    }
+#endif /* DEBUG */
+
+    g_olsr_event_stats[m->type]++;
+    
     switch(m->type) {
         case HELLO_TX:
         {
-            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
             
             cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
@@ -788,7 +844,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // Copy the message we just received; we can't add data to
             // a message sent by another node
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
-                ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
                 
                 tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
@@ -955,7 +1011,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 if (onlyOne) {
                     s->mprSet[s->num_mpr] = g_mpr_two_hop[i].neighborMainAddr;
                     s->num_mpr++;
-                    
+                    assert(s->num_mpr < OLSR_MAX_NEIGHBORS);
                     // Make sure they're all unique!
                     mpr_set_uniq(s);
                     
@@ -1106,7 +1162,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                 if (max > 0) {
                     s->mprSet[s->num_mpr] = g_mpr_neigh_to_add.neighborMainAddr;
                     s->num_mpr++;
-                    
+                    assert(s->num_mpr < OLSR_MAX_NEIGHBORS);
                     // Make sure they're all unique!
                     mpr_set_uniq(s);
                     
@@ -1146,6 +1202,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                         // We should add this guy to the selector set
                         s->mprSelSet[s->num_mpr_sel].mainAddr = m->originator;
                         s->num_mpr_sel++;
+                        assert(s->num_mpr_sel <= OLSR_MAX_NEIGHBORS);
                         mpr_sel_set_uniq(s);
                     }
                 }
@@ -1158,7 +1215,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
         case TC_TX:
         {
             // Might want to rename HELLO_DELTA...
-            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
             
             cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
@@ -1206,6 +1263,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // From http://www.dslreports.com/forum/r25655787-When-is-TTL-Decremented-by-a-Router-
             
             if (m->ttl == 0) {
+                printf("TC_RX\n");
                 printf("TTL Expired\n");
                 return;
             }
@@ -1216,7 +1274,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // a message sent by another node
             
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
-                ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
                 
                 tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
@@ -1358,7 +1416,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             }
             
             // Might want to rename HELLO_DELTA...
-            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
             
             cur_lp = tw_getlocal_lp(region(s->local_address)*OLSR_MAX_NEIGHBORS);
             
@@ -1391,6 +1449,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // From http://www.dslreports.com/forum/r25655787-When-is-TTL-Decremented-by-a-Router-
             
             if (m->ttl == 0) {
+                printf("SA_RX\n");
                 printf("TTL Expired\n");
                 return;
             }
@@ -1406,7 +1465,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             // a message sent by another node
             
             if (m->target < region(s->local_address)*OLSR_MAX_NEIGHBORS+OLSR_MAX_NEIGHBORS-1) {
-                ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
                 
                 tw_lp *cur_lp = tw_getlocal_lp(m->target + 1);
                 
@@ -1450,7 +1509,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                     return;
                 }
                 
-                ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+                ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
                 e = tw_event_new(lp->gid, ts, lp);
                 msg = tw_event_data(e);
                 msg->type = SA_RX;
@@ -1484,7 +1543,7 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             tw_event_send(e);
                         
             // Send it on to node 0
-            ts = tw_rand_exponential(lp->rng, HELLO_DELTA);
+            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
             e = tw_event_new(0, ts, lp);
             msg = tw_event_data(e);
             msg->type = SA_MASTER_RX;
@@ -1502,6 +1561,25 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 	  //printf("RECEIVED SA_MASTER\n");
             return;
         }
+        case RWALK_CHANGE:
+        {
+            //printf("Changing our location to %f, %f\n",
+            //       m->lng, m->lat);
+            s->lng = m->lng;
+            s->lat = m->lat;
+            
+            // Build our initial RWALK_CHANGE messages
+            ts = tw_rand_unif(lp->rng) * RWALK_INTERVAL + 1.0;
+            e = tw_event_new(lp->gid, ts, lp);
+            msg = tw_event_data(e);
+            msg->type = RWALK_CHANGE;
+            msg->lng = tw_rand_unif(lp->rng) * GRID_MAX;
+            msg->lat = tw_rand_unif(lp->rng) * GRID_MAX;
+            tw_event_send(e);
+        }
+            
+        default:
+            return;
     }
     
     RoutingTableComputation(s);
@@ -1589,6 +1667,8 @@ tw_lptype olsr_lps[] = {
 const tw_optdef olsr_opts[] = {
     TWOPT_GROUP("OLSR Model"),
     TWOPT_UINT("lp_per_pe", nlp_per_pe, "number of LPs per processor"),
+    TWOPT_STIME("lookahead", g_tw_lookahead, "lookahead for the simulation"),
+    TWOPT_CHAR("rwalk", g_olsr_mobility, "random walk [Y/N]"),
     TWOPT_END(),
 };
 
@@ -1604,9 +1684,12 @@ int olsr_main(int argc, char *argv[])
     tw_init(&argc, &argv);
     
     // nlp_per_pe = OLSR_MAX_NEIGHBORS;// / tw_nnodes();
-   g_tw_lookahead = HELLO_INTERVAL * 1024;
-   g_tw_events_per_pe =  25 * nlp_per_pe  + 65536*2;
+   //g_tw_lookahead = SA_INTERVAL;
+   g_tw_events_per_pe =  OLSR_MAX_NEIGHBORS / 2 * nlp_per_pe  + 65536;
    tw_define_lps(nlp_per_pe, sizeof(olsr_msg_data), 0);
+   
+    for(i = 0; i < OLSR_END_EVENT; i++)
+        g_olsr_event_stats[i] = 0;
     
    for (i = 0; i < g_tw_nlp; i++) {
      tw_lp_settype(i, &olsr_lps[0]);
@@ -1614,7 +1697,14 @@ int olsr_main(int argc, char *argv[])
     
     tw_run();
     
+    if( g_tw_synchronization_protocol != 1 )
+    {
+        MPI_Reduce( g_olsr_event_stats, g_olsr_event_stats, OLSR_END_EVENT, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+    }
+    
     if (tw_ismaster()) {
+        for( i = 0; i < OLSR_END_EVENT; i++ )
+            printf("OLSR Type %d Event Count = %llu \n", i, g_olsr_event_stats[i]);
         printf("Complete.\n");
     }
     
