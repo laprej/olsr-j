@@ -23,6 +23,8 @@
 
 #include "ross.h"
 
+#define ENABLE_OPTIMISTIC 0
+
 /** HELLO message interval */
 #define HELLO_INTERVAL 2
 /** TC message interval */
@@ -302,6 +304,9 @@ typedef struct
     union message_type mt; ///< Union for message type
     unsigned long target;  ///< Target index into g_tw_lp
     uint16_t seq_num;      ///< Sequence number for this message
+#if ENABLE_OPTIMISTIC
+    node_state state_copy;  ///< copy state for the lp that processes the event
+#endif 
 } olsr_msg_data;
 
 

@@ -36,10 +36,25 @@ char g_covered[BITNSLOTS(OLSR_MAX_NEIGHBORS)];
 char g_olsr_mobility = 'N';
 
 unsigned long long g_olsr_event_stats[OLSR_END_EVENT];
+unsigned long long g_olsr_root_event_stats[OLSR_END_EVENT];
 
 unsigned region(o_addr a)
 {
     return a / OLSR_MAX_NEIGHBORS;
+}
+
+static unsigned int SA_range_start;
+
+o_addr sa_master_for_level(o_addr lpid, int level)
+{
+    // Get the region number
+    int rnum = region(lpid);
+    // Now correct for all the LPs before this aggregator
+    rnum += SA_range_start * tw_nnodes();
+    printf("We're sending SA data to node %d\n", rnum);
+    return rnum;
+    
+    return 0;
 }
 
 /**
@@ -120,11 +135,12 @@ void olsr_init(node_state *s, tw_lp *lp)
         tw_event_send(e);
     }
     
-#if 0 /* Source of instability */
+#if 1 /* Source of instability if done naively */
     // Build our initial SA_MASTER_TX messages
     if (s->local_address == MASTER_NODE) {
         ts = tw_rand_unif(lp->rng) * MASTER_SA_INTERVAL + MASTER_SA_INTERVAL;
-        e = tw_event_new(lp->gid, ts, lp);
+        //e = tw_event_new(lp->gid, ts, lp);
+        e = tw_event_new(sa_master_for_level(lp->gid, 0), ts, lp);
         msg = tw_event_data(e);
         msg->type = SA_MASTER_TX;
         msg->originator = s->local_address;
@@ -139,6 +155,9 @@ void olsr_init(node_state *s, tw_lp *lp)
 
 void sa_master_init(node_state *s, tw_lp *lp)
 {
+    s->local_address = lp->gid;
+    printf("I am an SA master and my local_address is %lu\n", s->local_address);
+    fflush(stdout);
     
 }
 
@@ -785,6 +804,13 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
                lp->gid, g_tw_mynode, tw_now(lp), s->local_address, m->type, m->sender, m->originator );
     }
 #endif /* DEBUG */
+
+#if ENABLE_OPTIMISTIC
+    if( g_tw_synchronization_protocol == OPTIMISTIC )
+      {
+	memcpy( &(m->state_copy), s, sizeof(node_state));
+      }
+#endif 
 
     g_olsr_event_stats[m->type]++;
     
@@ -1590,6 +1616,17 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     RoutingTableComputation(s);
 }
 
+void olsr_event_reverse(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
+{
+#if ENABLE_OPTIMISTIC
+    if( g_tw_synchronization_protocol == OPTIMISTIC )
+      {
+	memcpy( s, &(m->state_copy), sizeof(node_state));
+      }
+    g_olsr_event_stats[m->type]--;
+#endif 
+}
+
 void olsr_final(node_state *s, tw_lp *lp)
 {
     int i;
@@ -1653,7 +1690,6 @@ void olsr_final(node_state *s, tw_lp *lp)
 }
 
 extern unsigned int nkp_per_pe;
-static unsigned int SA_range_start;
 
 tw_peid olsr_map(tw_lpid gid)
 {
@@ -1782,7 +1818,7 @@ tw_lptype olsr_lps[] = {
     {
         (init_f) olsr_init,
         (event_f) olsr_event,
-        (revent_f) NULL,
+        (revent_f) olsr_event_reverse,
         (final_f) olsr_final,
         (map_f) olsr_map,
         sizeof(node_state)
@@ -1850,12 +1886,12 @@ int olsr_main(int argc, char *argv[])
     
     if( g_tw_synchronization_protocol != 1 )
     {
-        MPI_Reduce( g_olsr_event_stats, g_olsr_event_stats, OLSR_END_EVENT, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
+        MPI_Reduce( g_olsr_event_stats, g_olsr_root_event_stats, OLSR_END_EVENT, MPI_LONG_LONG, MPI_SUM, 0, MPI_COMM_WORLD);
     }
     
     if (tw_ismaster()) {
         for( i = 0; i < OLSR_END_EVENT; i++ )
-            printf("OLSR Type %d Event Count = %llu \n", i, g_olsr_event_stats[i]);
+            printf("OLSR Type %d Event Count = %llu \n", i, g_olsr_root_event_stats[i]);
         printf("Complete.\n");
     }
     
