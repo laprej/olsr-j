@@ -161,9 +161,7 @@ void olsr_init(node_state *s, tw_lp *lp)
 void sa_master_init(node_state *s, tw_lp *lp)
 {
     s->local_address = lp->gid;
-    printf("I am an SA master and my local_address is %lu\n", s->local_address);
-    fflush(stdout);
-    
+    printf("I am an SA master and my local_address is %lu\n", s->local_address);    
 }
 
 /**
@@ -1711,6 +1709,7 @@ tw_peid olsr_map(tw_lpid gid)
     }
     // gid is above the max lpid, it must be an aggregator
     gid -= SA_range_start * tw_nnodes();
+    gid /= (SA_range_start / OLSR_MAX_NEIGHBORS);
     return gid / tw_nnodes();
 }
 
@@ -1726,6 +1725,8 @@ void olsr_custom_mapping(void)
 	int	 i;
 	int	 j;
     
+    int foo;
+    
 	// may end up wasting last KP, but guaranteed each KP has == nLPs
 	nlp_per_kp = ceil((double) g_tw_nlp / (double) g_tw_nkp);
     
@@ -1733,6 +1734,7 @@ void olsr_custom_mapping(void)
 		tw_error(TW_LOC, "Not enough KPs defined: %d", g_tw_nkp);
     
 	g_tw_lp_offset = g_tw_mynode * SA_range_start;
+    foo = g_tw_lp_offset;
     
 #if VERIFY_MAPPING
 	printf("NODE %d: nlp %lld, offset %lld\n", 
@@ -1753,7 +1755,6 @@ void olsr_custom_mapping(void)
 			printf("\t\tKP %d", kpid);
 #endif
             
-            int foo = g_tw_lp_offset;
             
 			for(j = 0; j < nlp_per_kp && lpid < g_tw_nlp; j++, lpid++)
 			{
@@ -1803,7 +1804,7 @@ tw_lp * olsr_mapping_to_lp(tw_lpid lpid)
     
     if (id >= SA_range_start * tw_nnodes()) {
         id -= SA_range_start * tw_nnodes();
-        id %= nlp_per_pe / OLSR_MAX_NEIGHBORS;
+        id %= SA_range_start / OLSR_MAX_NEIGHBORS;
         id += SA_range_start;
         
 #if VERIFY_MAPPING
