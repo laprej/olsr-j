@@ -1625,6 +1625,17 @@ void sa_master_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
     
     printf("I fired\n");
     fflush(stdout);
+    
+    switch (m->type) {
+        case SA_MASTER_TX:
+            break;
+            
+        case SA_MASTER_RX:
+            break;
+            
+        default:
+            break;
+    }
 }
 
 void olsr_event_reverse(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
@@ -1908,7 +1919,7 @@ int olsr_main(int argc, char *argv[])
     
     if (tw_ismaster()) {
         for( i = 0; i < OLSR_END_EVENT; i++ )
-            printf("OLSR Type %d Event Count = %llu \n", i, g_olsr_root_event_stats[i]);
+            printf("OLSR Type %s Event Count = %llu \n", event_names[i], g_olsr_root_event_stats[i]);
         printf("Complete.\n");
     }
     
