@@ -45,6 +45,11 @@ unsigned region(o_addr a)
 
 static unsigned int SA_range_start;
 
+/**
+ * Returns the lpid of the master SA aggregator for the region containing lpid.  
+ * For example, if OMN = 16 then we have 16 OLSR nodes followed by one master
+ * on each pe.
+ */
 o_addr sa_master_for_level(o_addr lpid, int level)
 {
     // Get the region number
@@ -1797,13 +1802,15 @@ tw_lp * olsr_mapping_to_lp(tw_lpid lpid)
     int id = lpid;
     
     if (id >= SA_range_start * tw_nnodes()) {
-        id -= SA_range_start * g_tw_mynode;
-        id /= tw_nnodes();
+        id -= SA_range_start * tw_nnodes();
+        id %= nlp_per_pe / OLSR_MAX_NEIGHBORS;
+        id += SA_range_start;
         
 #if VERIFY_MAPPING
         printf("Accessing gid %lu -> g_tw_lp[%d]\n", lpid, id);
 #endif
         
+        assert(id < g_tw_nlp);
         return g_tw_lp[id];
     }
     
@@ -1813,6 +1820,7 @@ tw_lp * olsr_mapping_to_lp(tw_lpid lpid)
     printf("Accessing gid %lu -> g_tw_lp[%d]\n", lpid, id);
 #endif
     
+    assert(id < g_tw_nlp);
     return g_tw_lp[id];
 }
 
