@@ -1743,7 +1743,7 @@ tw_peid olsr_map(tw_lpid gid)
     // gid is above the max lpid, it must be an aggregator
     gid -= SA_range_start * tw_nnodes();
     gid /= (SA_range_start / OLSR_MAX_NEIGHBORS);
-    return gid / tw_nnodes();
+    return gid;
 }
 
 //#define VERIFY_MAPPING 1
