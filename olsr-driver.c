@@ -56,7 +56,7 @@ o_addr sa_master_for_level(o_addr lpid, int level)
     int rnum = region(lpid);
     // Now correct for all the LPs before this aggregator
     rnum += SA_range_start * tw_nnodes();
-    printf("We're sending SA data to node %d\n", rnum);
+    //printf("We're sending SA data to node %d\n", rnum);
     return rnum;
     
     return 0;
@@ -161,7 +161,7 @@ void olsr_init(node_state *s, tw_lp *lp)
 void sa_master_init(node_state *s, tw_lp *lp)
 {
     s->local_address = lp->gid;
-    printf("I am an SA master and my local_address is %lu\n", s->local_address);    
+    //printf("I am an SA master and my local_address is %lu\n", s->local_address);    
 }
 
 /**
@@ -1581,7 +1581,10 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 #endif
         case SA_MASTER_TX:
         {
-            printf("RECEIVED SA_MASTER_RX VALIDLY\n");
+            int total_nodes = SA_range_start * tw_nnodes();
+            int total_regions = total_nodes / OLSR_MAX_NEIGHBORS;
+            
+            printf("RECEIVED SA_MASTER_TX VALIDLY\n");
             fflush(stdout);
 	  //printf("originator is %lu\n", m->originator);
             // Schedule ourselves again...
@@ -1595,18 +1598,32 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             msg->lng = s->lng;
             msg->lat = s->lat;
             tw_event_send(e);
+            
+            for (i = 0; i < total_regions; i++) {
+                if (s->local_address == total_nodes + i) {
+                    printf("Don't send a satellite message to ourselves! %lu->%d\n",
+                           s->local_address, total_nodes + i);
+                    continue;
+                }
+                // 2 second round-trip for satellite communications
+                ts = 2.0 + tw_rand_unif(lp->rng);
+                e = tw_event_new(total_nodes + i, ts, lp);
+                msg = tw_event_data(e);
+                msg->type = SA_MASTER_RX;
+                tw_event_send(e);
+            }
                         
-            // Send it on to node 0
-            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
-            e = tw_event_new(sa_master_for_level(lp->gid, 0), ts, lp);
-            msg = tw_event_data(e);
-            msg->type = SA_MASTER_RX;
-            msg->originator = s->local_address;
-            msg->sender = s->local_address;
-            msg->destination = sa_master_for_level(lp->gid, 0);
-            msg->lng = s->lng;
-            msg->lat = s->lat;
-            tw_event_send(e);
+//            // Send it on to node 0
+//            ts = g_tw_lookahead + tw_rand_unif(lp->rng) * HELLO_DELTA;
+//            e = tw_event_new(sa_master_for_level(lp->gid, 0), ts, lp);
+//            msg = tw_event_data(e);
+//            msg->type = SA_MASTER_RX;
+//            msg->originator = s->local_address;
+//            msg->sender = s->local_address;
+//            msg->destination = sa_master_for_level(lp->gid, 0);
+//            msg->lng = s->lng;
+//            msg->lat = s->lat;
+//            tw_event_send(e);
             
             return;
         }
@@ -1642,6 +1659,13 @@ void olsr_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 
 void sa_master_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
 {
+//    int i;
+//    tw_stime ts;
+//    tw_event *e;
+//    olsr_msg_data *msg;
+//    int total_nodes = SA_range_start * tw_nnodes();
+//    int total_regions = total_nodes / OLSR_MAX_NEIGHBORS;
+    
     g_olsr_event_stats[m->type]++;
     
     switch (m->type) {
@@ -1651,8 +1675,22 @@ void sa_master_event(node_state *s, tw_bf *bf, olsr_msg_data *m, tw_lp *lp)
             break;
             
         case SA_MASTER_RX:
-            printf("RECEIVED SA_MASTER_RX VALIDLY\n");
-            fflush(stdout);
+            //printf("RECEIVED SA_MASTER_RX VALIDLY\n");
+            //fflush(stdout);
+            
+//            for (i = 0; i < total_regions; i++) {
+//                if (s->local_address == total_nodes + i) {
+//                    printf("Don't send a satellite message to ourselves! %lu->%d\n",
+//                           s->local_address, total_nodes + i);
+//                    continue;
+//                }
+//                // 2 second round-trip for satellite communications
+//                ts = 2.0 + tw_rand_unif(lp->rng);
+//                e = tw_event_new(total_nodes + i, ts, lp);
+//                msg = tw_event_data(e);
+//                msg->type = SA_MASTER_RX;
+//                tw_event_send(e);
+//            }
             break;
             
         default:
