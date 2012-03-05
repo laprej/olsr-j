@@ -8,12 +8,13 @@
 // are available.
 
 typedef uintptr_t o_addr;
+int world_size;
+unsigned int SA_range_start;
 
 // Catch is a C++ testing framework.  As such, you need to tell it to look
-// for things the way they are specified in C.
+// for things the way they are specified in C, i.e. function names should
+// not be mangled.
 extern "C" {
-    int world_size;
-    unsigned int SA_range_start;
     o_addr sa_master_for_level(o_addr lpid);
 }
 
